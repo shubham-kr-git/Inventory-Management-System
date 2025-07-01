@@ -58,7 +58,19 @@ app.get('/health', (req, res) => {
   });
 });
 
-// API routes will be added here
+// Import routes
+const productRoutes = require('./routes/products');
+const supplierRoutes = require('./routes/suppliers');
+const transactionRoutes = require('./routes/transactions');
+const dashboardRoutes = require('./routes/dashboard');
+
+// API routes
+app.use('/api/products', productRoutes);
+app.use('/api/suppliers', supplierRoutes);
+app.use('/api/transactions', transactionRoutes);
+app.use('/api/dashboard', dashboardRoutes);
+
+// API info endpoint
 app.get('/api', (req, res) => {
   res.status(200).json({
     success: true,

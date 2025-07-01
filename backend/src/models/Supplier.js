@@ -151,7 +151,6 @@ supplierSchema.virtual('creditUtilization').get(function() {
 
 // Index for better query performance
 supplierSchema.index({ name: 1 });
-supplierSchema.index({ email: 1 });
 supplierSchema.index({ isActive: 1 });
 supplierSchema.index({ categories: 1 });
 

@@ -126,7 +126,6 @@ productSchema.virtual('stockStatus').get(function() {
 });
 
 // Index for better query performance
-productSchema.index({ sku: 1 });
 productSchema.index({ category: 1 });
 productSchema.index({ supplier: 1 });
 productSchema.index({ isActive: 1 });

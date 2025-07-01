@@ -30,7 +30,7 @@ const seedData = async () => {
         website: 'https://techsolutions.com',
         paymentTerms: 'Net 30',
         creditLimit: 50000,
-        categories: ['Electronics', 'Computers'],
+        categories: ['Electronics'],
         rating: 4.5,
         leadTime: 7
       },
