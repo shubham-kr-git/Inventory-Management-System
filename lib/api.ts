@@ -54,6 +54,19 @@ export interface Product {
   updatedAt: string;
 }
 
+// Interface for creating products - supplier is just an ID string
+export interface CreateProductData {
+  name: string;
+  sku: string;
+  category: string;
+  description?: string;
+  price: number;
+  costPrice: number;
+  currentStock: number;
+  minStockThreshold: number;
+  supplier: string; // Just the supplier ID string
+}
+
 export interface Supplier {
   _id: string;
   name: string;
@@ -170,7 +183,7 @@ export const productsApi = {
   getById: (id: string): Promise<{ success: boolean; data: Product }> =>
     apiRequest(`/products/${id}`),
 
-  create: (product: Omit<Product, '_id' | 'createdAt' | 'updatedAt' | 'stockStatus' | 'totalValue' | 'profitMargin'>): Promise<{ success: boolean; data: Product }> =>
+  create: (product: CreateProductData): Promise<{ success: boolean; data: Product }> =>
     apiRequest('/products', {
       method: 'POST',
       body: JSON.stringify(product),

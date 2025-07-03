@@ -95,30 +95,56 @@ const getProduct = async (req, res) => {
 // Create new product
 const createProduct = async (req, res) => {
   try {
+    console.log('=== CREATE PRODUCT DEBUG ===');
+    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    
     // Validate supplier exists
+    console.log('Looking for supplier with ID:', req.body.supplier);
     const supplier = await Supplier.findById(req.body.supplier);
     if (!supplier) {
+      console.log('Supplier not found!');
       return res.status(400).json({
         success: false,
         error: 'Supplier not found'
       });
     }
+    console.log('Supplier found:', supplier.name);
 
+    console.log('Creating product with data:', req.body);
     const product = await Product.create(req.body);
+    console.log('Product created successfully:', product._id);
     
     const populatedProduct = await Product.findById(product._id)
       .populate('supplier', 'name email');
 
+    console.log('=== CREATE PRODUCT SUCCESS ===');
     res.status(201).json({
       success: true,
       data: populatedProduct,
       message: 'Product created successfully'
     });
   } catch (error) {
+    console.log('=== CREATE PRODUCT ERROR ===');
+    console.log('Error type:', error.constructor.name);
+    console.log('Error code:', error.code);
+    console.log('Error message:', error.message);
+    console.log('Full error:', error);
+    
     if (error.code === 11000) {
+      console.log('Duplicate key error - SKU already exists');
       return res.status(400).json({
         success: false,
         error: 'SKU already exists'
+      });
+    }
+    
+    if (error.name === 'ValidationError') {
+      console.log('Validation error details:', error.errors);
+      return res.status(400).json({
+        success: false,
+        error: 'Validation failed',
+        details: error.message,
+        validationErrors: error.errors
       });
     }
     

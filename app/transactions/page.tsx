@@ -1,7 +1,260 @@
-import React from 'react'
-import { FiTrendingUp, FiPlus } from 'react-icons/fi'
+'use client'
+
+import React, { useState, useEffect } from 'react'
+import { 
+  FiTrendingUp, 
+  FiPlus, 
+  FiSearch, 
+  FiEdit2, 
+  FiTrash2, 
+  FiDownload,
+  FiAlertCircle,
+  FiX,
+  FiFilter,
+  FiCalendar,
+  FiDollarSign,
+  FiPackage,
+  FiUsers,
+  FiArrowUp,
+  FiArrowDown
+} from 'react-icons/fi'
+import { transactionsApi, productsApi, suppliersApi, Transaction, Product, Supplier } from '../../lib/api'
+
+interface TransactionFormData {
+  type: 'purchase' | 'sale' | 'adjustment' | 'return';
+  product: string;
+  quantity: number;
+  unitPrice: number;
+  customer?: {
+    name: string;
+    email?: string;
+    phone?: string;
+  };
+  supplier?: string;
+  status: 'pending' | 'completed' | 'cancelled';
+  paymentStatus: 'pending' | 'paid' | 'overdue';
+}
 
 export default function TransactionsPage() {
+  const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [products, setProducts] = useState<Product[]>([])
+  const [suppliers, setSuppliers] = useState<Supplier[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  
+  // Filters and pagination
+  const [searchTerm, setSearchTerm] = useState('')
+  const [selectedType, setSelectedType] = useState('')
+  const [selectedStatus, setSelectedStatus] = useState('')
+  const [selectedProduct, setSelectedProduct] = useState('')
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage] = useState(10)
+  
+  // Modals
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null)
+  
+  // Form data
+  const [formData, setFormData] = useState<TransactionFormData>({
+    type: 'purchase',
+    product: '',
+    quantity: 1,
+    unitPrice: 0,
+    customer: {
+      name: '',
+      email: '',
+      phone: ''
+    },
+    supplier: '',
+    status: 'pending',
+    paymentStatus: 'pending'
+  })
+
+  // Transaction types
+  const transactionTypes = [
+    { value: 'purchase', label: 'Purchase', icon: FiArrowDown, color: 'text-green-600' },
+    { value: 'sale', label: 'Sale', icon: FiArrowUp, color: 'text-blue-600' },
+    { value: 'adjustment', label: 'Adjustment', icon: FiTrendingUp, color: 'text-yellow-600' },
+    { value: 'return', label: 'Return', icon: FiX, color: 'text-red-600' }
+  ]
+
+  // Fetch data
+  const fetchTransactions = async () => {
+    try {
+      setLoading(true)
+      const response = await transactionsApi.getAll({
+        page: currentPage,
+        limit: itemsPerPage,
+        type: selectedType || undefined,
+        status: selectedStatus || undefined,
+        product: selectedProduct || undefined,
+        startDate: startDate || undefined,
+        endDate: endDate || undefined
+      })
+      setTransactions(response.data)
+      setError(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch transactions')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const fetchProducts = async () => {
+    try {
+      const response = await productsApi.getAll()
+      setProducts(response.data)
+    } catch (err) {
+      console.error('Failed to fetch products:', err)
+    }
+  }
+
+  const fetchSuppliers = async () => {
+    try {
+      const response = await suppliersApi.getAll()
+      setSuppliers(response.data)
+    } catch (err) {
+      console.error('Failed to fetch suppliers:', err)
+    }
+  }
+
+  useEffect(() => {
+    fetchTransactions()
+  }, [currentPage, selectedType, selectedStatus, selectedProduct, startDate, endDate])
+
+  useEffect(() => {
+    fetchProducts()
+    fetchSuppliers()
+  }, [])
+
+  // Handle form submission
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    try {
+      // Transform form data for API
+      const selectedProductObj = products.find(p => p._id === formData.product)
+      const selectedSupplierObj = suppliers.find(s => s._id === formData.supplier)
+      
+      const transactionData = {
+        ...formData,
+        product: {
+          _id: formData.product,
+          name: selectedProductObj?.name || '',
+          sku: selectedProductObj?.sku || ''
+        },
+        supplier: formData.supplier && selectedSupplierObj ? {
+          _id: formData.supplier,
+          name: selectedSupplierObj.name
+        } : undefined,
+        totalAmount: formData.quantity * formData.unitPrice
+      }
+
+      if (showEditModal && selectedTransaction) {
+        await transactionsApi.update(selectedTransaction._id, transactionData)
+      } else {
+        await transactionsApi.create(transactionData)
+      }
+      await fetchTransactions()
+      handleCloseModal()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save transaction')
+    }
+  }
+
+  // Handle delete
+  const handleDelete = async () => {
+    if (!selectedTransaction) return
+    try {
+      await transactionsApi.delete(selectedTransaction._id)
+      await fetchTransactions()
+      setShowDeleteModal(false)
+      setSelectedTransaction(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete transaction')
+    }
+  }
+
+  // Modal handlers
+  const handleAddTransaction = () => {
+    setFormData({
+      type: 'purchase',
+      product: '',
+      quantity: 1,
+      unitPrice: 0,
+      customer: {
+        name: '',
+        email: '',
+        phone: ''
+      },
+      supplier: '',
+      status: 'pending',
+      paymentStatus: 'pending'
+    })
+    setShowAddModal(true)
+  }
+
+  const handleEditTransaction = (transaction: Transaction) => {
+    setSelectedTransaction(transaction)
+    setFormData({
+      type: transaction.type,
+      product: transaction.product._id,
+      quantity: transaction.quantity,
+      unitPrice: transaction.unitPrice,
+      customer: transaction.customer || { name: '', email: '', phone: '' },
+      supplier: transaction.supplier?._id || '',
+      status: transaction.status,
+      paymentStatus: transaction.paymentStatus
+    })
+    setShowEditModal(true)
+  }
+
+  const handleDeleteTransaction = (transaction: Transaction) => {
+    setSelectedTransaction(transaction)
+    setShowDeleteModal(true)
+  }
+
+  const handleCloseModal = () => {
+    setShowAddModal(false)
+    setShowEditModal(false)
+    setShowDeleteModal(false)
+    setSelectedTransaction(null)
+    setError(null)
+  }
+
+  const getTransactionTypeConfig = (type: string) => {
+    return transactionTypes.find(t => t.value === type) || transactionTypes[0]
+  }
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'completed': return 'text-green-600 bg-green-100'
+      case 'pending': return 'text-yellow-600 bg-yellow-100'
+      case 'cancelled': return 'text-red-600 bg-red-100'
+      default: return 'text-gray-600 bg-gray-100'
+    }
+  }
+
+  const getPaymentStatusColor = (status: string) => {
+    switch (status) {
+      case 'paid': return 'text-green-600 bg-green-100'
+      case 'pending': return 'text-yellow-600 bg-yellow-100'
+      case 'overdue': return 'text-red-600 bg-red-100'
+      default: return 'text-gray-600 bg-gray-100'
+    }
+  }
+
+  const clearFilters = () => {
+    setSelectedType('')
+    setSelectedStatus('')
+    setSelectedProduct('')
+    setStartDate('')
+    setEndDate('')
+  }
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -14,29 +267,495 @@ export default function TransactionsPage() {
             Record and track all inventory movements
           </p>
         </div>
-        <div className="mt-4 flex md:mt-0 md:ml-4">
-          <button className="btn-primary flex items-center space-x-2">
+        <div className="mt-4 flex space-x-3 md:mt-0 md:ml-4">
+          <button className="btn-secondary flex items-center space-x-2">
+            <FiDownload className="h-4 w-4" />
+            <span>Export</span>
+          </button>
+          <button 
+            onClick={handleAddTransaction}
+            className="btn-primary flex items-center space-x-2"
+          >
             <FiPlus className="h-4 w-4" />
             <span>Record Transaction</span>
           </button>
         </div>
       </div>
 
-      {/* Coming Soon Card */}
-      <div className="card p-12 text-center">
-        <div className="mx-auto h-24 w-24 bg-primary-100 rounded-full flex items-center justify-center mb-6">
-          <FiTrendingUp className="h-12 w-12 text-primary-600" />
-        </div>
-        <h3 className="text-xl font-semibold text-gray-900 mb-2">
-          Transaction Management
-        </h3>
-        <p className="text-gray-500 mb-6 max-w-md mx-auto">
-          This page will contain transaction recording system for sales and purchases, with detailed history and filtering capabilities.
-        </p>
-        <div className="text-sm text-gray-400">
-          Coming in Phase 2 - Backend Integration
+      {/* Filters */}
+      <div className="card p-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Transaction Type
+            </label>
+            <select
+              value={selectedType}
+              onChange={(e) => setSelectedType(e.target.value)}
+              className="input"
+            >
+              <option value="">All Types</option>
+              {transactionTypes.map(type => (
+                <option key={type.value} value={type.value}>{type.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Status
+            </label>
+            <select
+              value={selectedStatus}
+              onChange={(e) => setSelectedStatus(e.target.value)}
+              className="input"
+            >
+              <option value="">All Status</option>
+              <option value="pending">Pending</option>
+              <option value="completed">Completed</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Product
+            </label>
+            <select
+              value={selectedProduct}
+              onChange={(e) => setSelectedProduct(e.target.value)}
+              className="input"
+            >
+              <option value="">All Products</option>
+              {products.map(product => (
+                <option key={product._id} value={product._id}>{product.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Start Date
+            </label>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="input"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              End Date
+            </label>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="input"
+            />
+          </div>
+          <div className="flex items-end">
+            <button
+              onClick={clearFilters}
+              className="btn-secondary flex items-center justify-center space-x-2 w-full"
+            >
+              <FiX className="h-4 w-4" />
+              <span>Clear</span>
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Error Message */}
+      {error && (
+        <div className="bg-red-50 border-l-4 border-red-400 p-4">
+          <div className="flex">
+            <FiAlertCircle className="h-5 w-5 text-red-400" />
+            <div className="ml-3">
+              <p className="text-sm text-red-700">{error}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Transactions Table */}
+      <div className="card overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Transaction
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Product
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Quantity
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Unit Price
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Total Amount
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Status
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Date
+                </th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {loading ? (
+                <tr>
+                  <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
+                    Loading transactions...
+                  </td>
+                </tr>
+              ) : transactions.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
+                    No transactions found
+                  </td>
+                </tr>
+              ) : (
+                transactions.map((transaction) => {
+                  const typeConfig = getTransactionTypeConfig(transaction.type)
+                  const Icon = typeConfig.icon
+                  return (
+                    <tr key={transaction._id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center space-x-3">
+                          <div className={`p-2 rounded-full bg-gray-100 ${typeConfig.color}`}>
+                            <Icon className="h-4 w-4" />
+                          </div>
+                          <div>
+                            <div className="text-sm font-medium text-gray-900">
+                              {typeConfig.label} #{transaction.referenceNumber}
+                            </div>
+                            <div className="text-sm text-gray-500">
+                              {transaction.supplier?.name || transaction.customer?.name || 'N/A'}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">
+                            {transaction.product.name}
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            SKU: {transaction.product.sku}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {transaction.quantity}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        ${transaction.unitPrice.toFixed(2)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        ${transaction.totalAmount.toFixed(2)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="space-y-1">
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(transaction.status)}`}>
+                            {transaction.status}
+                          </span>
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getPaymentStatusColor(transaction.paymentStatus)}`}>
+                            {transaction.paymentStatus}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {new Date(transaction.createdAt).toLocaleDateString()}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <div className="flex justify-end space-x-2">
+                          <button
+                            onClick={() => handleEditTransaction(transaction)}
+                            className="text-indigo-600 hover:text-indigo-900"
+                            title="Edit Transaction"
+                          >
+                            <FiEdit2 className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteTransaction(transaction)}
+                            className="text-red-600 hover:text-red-900"
+                            title="Delete Transaction"
+                          >
+                            <FiTrash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Add/Edit Transaction Modal */}
+      {(showAddModal || showEditModal) && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-2/3 lg:w-1/2 shadow-lg rounded-md bg-white max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">
+                {showEditModal ? 'Edit Transaction' : 'Record New Transaction'}
+              </h3>
+              <button onClick={handleCloseModal} className="text-gray-400 hover:text-gray-600">
+                <FiX className="h-6 w-6" />
+              </button>
+            </div>
+            
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Transaction Type and Product */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Transaction Type *
+                  </label>
+                  <select
+                    required
+                    value={formData.type}
+                    onChange={(e) => setFormData({ ...formData, type: e.target.value as any })}
+                    className="input"
+                  >
+                    {transactionTypes.map(type => (
+                      <option key={type.value} value={type.value}>{type.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Product *
+                  </label>
+                  <select
+                    required
+                    value={formData.product}
+                    onChange={(e) => setFormData({ ...formData, product: e.target.value })}
+                    className="input"
+                  >
+                    <option value="">Select product</option>
+                    {products.map(product => (
+                      <option key={product._id} value={product._id}>
+                        {product.name} (SKU: {product.sku})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Quantity and Unit Price */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Quantity *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={formData.quantity}
+                    onChange={(e) => setFormData({ ...formData, quantity: parseInt(e.target.value) })}
+                    className="input"
+                    placeholder="1"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Unit Price *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    required
+                    value={formData.unitPrice}
+                    onChange={(e) => setFormData({ ...formData, unitPrice: parseFloat(e.target.value) })}
+                    className="input"
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+
+              {/* Total Amount Display */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Total Amount
+                </label>
+                <input
+                  type="text"
+                  value={`$${(formData.quantity * formData.unitPrice).toFixed(2)}`}
+                  disabled
+                  className="input bg-gray-100"
+                />
+              </div>
+
+              {/* Conditional Fields Based on Transaction Type */}
+              {(formData.type === 'purchase' || formData.type === 'return') && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Supplier
+                  </label>
+                  <select
+                    value={formData.supplier}
+                    onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
+                    className="input"
+                  >
+                    <option value="">Select supplier</option>
+                    {suppliers.map(supplier => (
+                      <option key={supplier._id} value={supplier._id}>
+                        {supplier.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {formData.type === 'sale' && (
+                <div>
+                  <h4 className="text-md font-medium text-gray-900 mb-3">Customer Information</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Customer Name
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.customer?.name || ''}
+                        onChange={(e) => setFormData({ 
+                          ...formData, 
+                          customer: { ...formData.customer!, name: e.target.value }
+                        })}
+                        className="input"
+                        placeholder="Enter customer name"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Email
+                      </label>
+                      <input
+                        type="email"
+                        value={formData.customer?.email || ''}
+                        onChange={(e) => setFormData({ 
+                          ...formData, 
+                          customer: { ...formData.customer!, email: e.target.value }
+                        })}
+                        className="input"
+                        placeholder="Enter email"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Phone
+                      </label>
+                      <input
+                        type="tel"
+                        value={formData.customer?.phone || ''}
+                        onChange={(e) => setFormData({ 
+                          ...formData, 
+                          customer: { ...formData.customer!, phone: e.target.value }
+                        })}
+                        className="input"
+                        placeholder="Enter phone"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Status Fields */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Transaction Status
+                  </label>
+                  <select
+                    value={formData.status}
+                    onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
+                    className="input"
+                  >
+                    <option value="pending">Pending</option>
+                    <option value="completed">Completed</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Payment Status
+                  </label>
+                  <select
+                    value={formData.paymentStatus}
+                    onChange={(e) => setFormData({ ...formData, paymentStatus: e.target.value as any })}
+                    className="input"
+                  >
+                    <option value="pending">Pending</option>
+                    <option value="paid">Paid</option>
+                    <option value="overdue">Overdue</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-4">
+                <button
+                  type="button"
+                  onClick={handleCloseModal}
+                  className="btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn-primary">
+                  {showEditModal ? 'Update Transaction' : 'Record Transaction'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && selectedTransaction && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-1/3 shadow-lg rounded-md bg-white">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-red-600">Delete Transaction</h3>
+              <button onClick={handleCloseModal} className="text-gray-400 hover:text-gray-600">
+                <FiX className="h-6 w-6" />
+              </button>
+            </div>
+            
+            <div className="mb-4">
+              <p className="text-gray-700">
+                Are you sure you want to delete transaction <strong>#{selectedTransaction.referenceNumber}</strong>? 
+                This action cannot be undone and may affect inventory levels.
+              </p>
+            </div>
+
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={handleCloseModal}
+                className="btn-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md"
+              >
+                Delete Transaction
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 } 
