@@ -25,6 +25,7 @@ interface TransactionFormData {
   product: string;
   quantity: number;
   unitPrice: number;
+  totalAmount?: number;
   customer?: {
     name: string;
     email?: string;
@@ -52,26 +53,19 @@ export default function TransactionsPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage] = useState(10)
   
-  // Modals
+  // Modal states - only keep add modal
   const [showAddModal, setShowAddModal] = useState(false)
-  const [showEditModal, setShowEditModal] = useState(false)
-  const [showDeleteModal, setShowDeleteModal] = useState(false)
-  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null)
   
-  // Form data
+  // Form state
   const [formData, setFormData] = useState<TransactionFormData>({
     type: 'purchase',
     product: '',
     quantity: 1,
     unitPrice: 0,
-    customer: {
-      name: '',
-      email: '',
-      phone: ''
-    },
+    customer: { name: '', email: '', phone: '' },
     supplier: '',
-    status: 'pending',
-    paymentStatus: 'pending'
+    status: 'completed',
+    paymentStatus: 'paid'
   })
 
   // Transaction types
@@ -131,97 +125,54 @@ export default function TransactionsPage() {
     fetchSuppliers()
   }, [])
 
-  // Handle form submission
+  // Handle form submission - only for creating new transactions
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      // Transform form data for API
-      const selectedProductObj = products.find(p => p._id === formData.product)
-      const selectedSupplierObj = suppliers.find(s => s._id === formData.supplier)
+      // Clean up customer data if it's a sale transaction
+      const submitData = { ...formData }
       
-      const transactionData = {
-        ...formData,
-        product: {
-          _id: formData.product,
-          name: selectedProductObj?.name || '',
-          sku: selectedProductObj?.sku || ''
-        },
-        supplier: formData.supplier && selectedSupplierObj ? {
-          _id: formData.supplier,
-          name: selectedSupplierObj.name
-        } : undefined,
-        totalAmount: formData.quantity * formData.unitPrice
+      // Calculate total amount
+      submitData.totalAmount = formData.quantity * formData.unitPrice
+      
+      if (submitData.type === 'sale') {
+        if (!submitData.customer?.name) {
+          submitData.customer = undefined
+        }
+      } else {
+        submitData.customer = undefined
+      }
+      
+      // Remove supplier for sales and adjustments
+      if (submitData.type === 'sale' || submitData.type === 'adjustment') {
+        submitData.supplier = undefined
       }
 
-      if (showEditModal && selectedTransaction) {
-        await transactionsApi.update(selectedTransaction._id, transactionData)
-      } else {
-        await transactionsApi.create(transactionData)
-      }
+      await transactionsApi.create(submitData)
       await fetchTransactions()
       handleCloseModal()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save transaction')
+      setError(err instanceof Error ? err.message : 'Failed to create transaction')
     }
   }
 
-  // Handle delete
-  const handleDelete = async () => {
-    if (!selectedTransaction) return
-    try {
-      await transactionsApi.delete(selectedTransaction._id)
-      await fetchTransactions()
-      setShowDeleteModal(false)
-      setSelectedTransaction(null)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete transaction')
-    }
-  }
-
-  // Modal handlers
+  // Modal handlers - simplified
   const handleAddTransaction = () => {
     setFormData({
       type: 'purchase',
       product: '',
       quantity: 1,
       unitPrice: 0,
-      customer: {
-        name: '',
-        email: '',
-        phone: ''
-      },
+      customer: { name: '', email: '', phone: '' },
       supplier: '',
-      status: 'pending',
-      paymentStatus: 'pending'
+      status: 'completed',
+      paymentStatus: 'paid'
     })
     setShowAddModal(true)
   }
 
-  const handleEditTransaction = (transaction: Transaction) => {
-    setSelectedTransaction(transaction)
-    setFormData({
-      type: transaction.type,
-      product: transaction.product._id,
-      quantity: transaction.quantity,
-      unitPrice: transaction.unitPrice,
-      customer: transaction.customer || { name: '', email: '', phone: '' },
-      supplier: transaction.supplier?._id || '',
-      status: transaction.status,
-      paymentStatus: transaction.paymentStatus
-    })
-    setShowEditModal(true)
-  }
-
-  const handleDeleteTransaction = (transaction: Transaction) => {
-    setSelectedTransaction(transaction)
-    setShowDeleteModal(true)
-  }
-
   const handleCloseModal = () => {
     setShowAddModal(false)
-    setShowEditModal(false)
-    setShowDeleteModal(false)
-    setSelectedTransaction(null)
     setError(null)
   }
 
@@ -243,6 +194,7 @@ export default function TransactionsPage() {
       case 'paid': return 'text-green-600 bg-green-100'
       case 'pending': return 'text-yellow-600 bg-yellow-100'
       case 'overdue': return 'text-red-600 bg-red-100'
+      case 'n/a': return 'text-blue-600 bg-blue-100'
       default: return 'text-gray-600 bg-gray-100'
     }
   }
@@ -271,13 +223,6 @@ export default function TransactionsPage() {
           <button className="btn-secondary flex items-center space-x-2">
             <FiDownload className="h-4 w-4" />
             <span>Export</span>
-          </button>
-          <button 
-            onClick={handleAddTransaction}
-            className="btn-primary flex items-center space-x-2"
-          >
-            <FiPlus className="h-4 w-4" />
-            <span>Record Transaction</span>
           </button>
         </div>
       </div>
@@ -403,21 +348,18 @@ export default function TransactionsPage() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Date
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
                     Loading transactions...
                   </td>
                 </tr>
               ) : transactions.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
                     No transactions found
                   </td>
                 </tr>
@@ -459,7 +401,7 @@ export default function TransactionsPage() {
                         ${transaction.unitPrice.toFixed(2)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        ${transaction.totalAmount.toFixed(2)}
+                        ${transaction.totalAmount?.toFixed(2) || 'N/A'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="space-y-1">
@@ -474,24 +416,6 @@ export default function TransactionsPage() {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {new Date(transaction.createdAt).toLocaleDateString()}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <div className="flex justify-end space-x-2">
-                          <button
-                            onClick={() => handleEditTransaction(transaction)}
-                            className="text-indigo-600 hover:text-indigo-900"
-                            title="Edit Transaction"
-                          >
-                            <FiEdit2 className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteTransaction(transaction)}
-                            className="text-red-600 hover:text-red-900"
-                            title="Delete Transaction"
-                          >
-                            <FiTrash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </td>
                     </tr>
                   )
                 })
@@ -501,13 +425,13 @@ export default function TransactionsPage() {
         </div>
       </div>
 
-      {/* Add/Edit Transaction Modal */}
-      {(showAddModal || showEditModal) && (
+      {/* Add Transaction Modal - Edit and Delete modals removed */}
+      {showAddModal && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
           <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-2/3 lg:w-1/2 shadow-lg rounded-md bg-white max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold">
-                {showEditModal ? 'Edit Transaction' : 'Record New Transaction'}
+                Record New Transaction
               </h3>
               <button onClick={handleCloseModal} className="text-gray-400 hover:text-gray-600">
                 <FiX className="h-6 w-6" />
@@ -713,46 +637,10 @@ export default function TransactionsPage() {
                   Cancel
                 </button>
                 <button type="submit" className="btn-primary">
-                  {showEditModal ? 'Update Transaction' : 'Record Transaction'}
+                  Record Transaction
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Confirmation Modal */}
-      {showDeleteModal && selectedTransaction && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-1/3 shadow-lg rounded-md bg-white">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-red-600">Delete Transaction</h3>
-              <button onClick={handleCloseModal} className="text-gray-400 hover:text-gray-600">
-                <FiX className="h-6 w-6" />
-              </button>
-            </div>
-            
-            <div className="mb-4">
-              <p className="text-gray-700">
-                Are you sure you want to delete transaction <strong>#{selectedTransaction.referenceNumber}</strong>? 
-                This action cannot be undone and may affect inventory levels.
-              </p>
-            </div>
-
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={handleCloseModal}
-                className="btn-secondary"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDelete}
-                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md"
-              >
-                Delete Transaction
-              </button>
-            </div>
           </div>
         </div>
       )}

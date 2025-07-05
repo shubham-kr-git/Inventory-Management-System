@@ -249,7 +249,7 @@ export default function ReportsPage() {
               onChange={(e) => setEndDate(e.target.value)}
               className="input"
             />
-          </div>
+        </div>
         </div>
       </div>
 

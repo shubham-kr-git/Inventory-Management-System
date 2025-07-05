@@ -202,7 +202,8 @@ const seedData = async () => {
 
     console.log(`Created ${products.length} products`);
 
-    // Create sample transactions
+    // Create sample transactions with recent dates
+    const now = new Date();
     const transactions = await Transaction.create([
       {
         type: 'purchase',
@@ -216,7 +217,7 @@ const seedData = async () => {
         status: 'completed',
         paymentMethod: 'bank_transfer',
         paymentStatus: 'paid',
-        date: new Date('2024-01-10')
+        date: new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000) // 10 days ago
       },
       {
         type: 'sale',
@@ -234,7 +235,7 @@ const seedData = async () => {
         status: 'completed',
         paymentMethod: 'credit_card',
         paymentStatus: 'paid',
-        date: new Date('2024-01-15')
+        date: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000) // 5 days ago
       },
       {
         type: 'purchase',
@@ -248,7 +249,7 @@ const seedData = async () => {
         status: 'completed',
         paymentMethod: 'check',
         paymentStatus: 'paid',
-        date: new Date('2024-01-12')
+        date: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000) // 7 days ago
       },
       {
         type: 'sale',
@@ -266,7 +267,38 @@ const seedData = async () => {
         status: 'completed',
         paymentMethod: 'cash',
         paymentStatus: 'paid',
-        date: new Date('2024-01-14')
+        date: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000) // 3 days ago
+      },
+      {
+        type: 'adjustment',
+        product: products[1]._id,
+        quantity: -2,
+        unitPrice: 0,
+        totalAmount: 0,
+        reference: 'ADJ-2024-001',
+        supplier: suppliers[2]._id,
+        notes: 'Stock adjustment - damaged items',
+        status: 'completed',
+        paymentStatus: 'n/a',
+        date: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000) // 2 days ago
+      },
+      {
+        type: 'sale',
+        product: products[4]._id,
+        quantity: 3,
+        unitPrice: 39.99,
+        totalAmount: 119.97,
+        reference: 'INV-2024-003',
+        customer: {
+          name: 'Bob Wilson',
+          email: 'bob.wilson@email.com',
+          phone: '+1-555-0789'
+        },
+        notes: 'Bulk purchase',
+        status: 'completed',
+        paymentMethod: 'credit_card',
+        paymentStatus: 'paid',
+        date: new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000) // 1 day ago
       }
     ]);
 

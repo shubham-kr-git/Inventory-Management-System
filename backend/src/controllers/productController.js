@@ -1,5 +1,11 @@
 const Product = require('../models/Product');
 const Supplier = require('../models/Supplier');
+const Transaction = require('../models/Transaction');
+const axios = require('axios');
+const {
+  GoogleGenAI,
+  Type,
+} = require("@google/genai");
 
 // Get all products with pagination and filtering
 const getProducts = async (req, res) => {
@@ -313,6 +319,113 @@ const updateStock = async (req, res) => {
   }
 };
 
+// Adjust product stock with transaction record
+const adjustStockWithTransaction = async (req, res) => {
+  try {
+    console.log('=== STOCK ADJUSTMENT WITH TRANSACTION ===');
+    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    
+    const { quantity, type, reason } = req.body;
+    
+    if (!quantity || !type) {
+      return res.status(400).json({
+        success: false,
+        error: 'Quantity and type are required'
+      });
+    }
+
+    const product = await Product.findById(req.params.id);
+    
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        error: 'Product not found'
+      });
+    }
+
+    // Calculate actual quantity change for transaction
+    let actualQuantityChange;
+    const currentStock = product.currentStock;
+    
+    switch (type) {
+      case 'add':
+        actualQuantityChange = quantity;
+        break;
+      case 'subtract':
+        actualQuantityChange = -quantity;
+        break;
+      case 'set':
+        actualQuantityChange = quantity - currentStock;
+        break;
+      default:
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid adjustment type'
+        });
+    }
+
+    // Generate reference number
+    const timestamp = Date.now();
+    const referenceNumber = `ADJ-${timestamp}`;
+
+    // Get product with supplier information
+    const productWithSupplier = await Product.findById(req.params.id).populate('supplier', '_id name');
+    
+    // Create transaction record first
+    const Transaction = require('../models/Transaction');
+    const transactionData = {
+      type: 'adjustment',
+      product: product._id,
+      quantity: actualQuantityChange, // Positive for additions, negative for subtractions
+      unitPrice: 0, // Adjustments have no monetary value
+      totalAmount: 0, // Adjustments have no monetary value
+      supplier: productWithSupplier.supplier._id, // Include supplier from product
+      reference: referenceNumber,
+      notes: `Stock adjustment: ${type} ${Math.abs(quantity)} units${reason ? ` (${reason})` : ''}`,
+      status: 'completed',
+      paymentStatus: 'n/a'
+    };
+
+    console.log('Creating transaction:', transactionData);
+    const transaction = new Transaction(transactionData);
+    await transaction.save();
+    console.log('Transaction created:', transaction._id);
+
+    // Update product stock
+    console.log(`Updating stock: ${currentStock} → ${type} ${quantity}`);
+    await product.updateStock(quantity, type);
+    console.log('Stock updated successfully');
+    
+    // Get updated product with populated supplier
+    const updatedProduct = await Product.findById(req.params.id)
+      .populate('supplier', 'name email');
+
+    console.log('Stock adjustment completed successfully');
+    
+    res.status(200).json({
+      success: true,
+      data: {
+        product: updatedProduct,
+        transaction: transaction
+      },
+      message: `Stock ${type === 'add' ? 'increased' : type === 'subtract' ? 'decreased' : 'adjusted'} successfully`
+    });
+  } catch (error) {
+    console.log('=== STOCK ADJUSTMENT ERROR ===');
+    console.log('Error type:', error.constructor.name);
+    console.log('Error message:', error.message);
+    if (error.errors) {
+      console.log('Validation errors:', error.errors);
+    }
+    
+    res.status(500).json({
+      success: false,
+      error: 'Error adjusting stock',
+      details: error.message
+    });
+  }
+};
+
 // Get product statistics
 const getProductStats = async (req, res) => {
   try {
@@ -344,6 +457,140 @@ const getProductStats = async (req, res) => {
   }
 };
 
+// AI reorder suggestions controller
+const getReorderSuggestions = async (req, res) => {
+  try {
+    // ... (Steps 1-3 are unchanged)
+    // 1. Fetch all products
+    const products = await Product.find({ isActive: true })
+      .select('_id name sku currentStock minStockThreshold')
+      .lean();
+
+    // 2. Fetch recent transactions
+    const sinceDate = new Date();
+    sinceDate.setDate(sinceDate.getDate() - 60);
+    const transactions = await Transaction.find({
+      date: { $gte: sinceDate },
+      product: { $in: products.map((p) => p._id) },
+    })
+      .select('product type quantity date')
+      .lean();
+
+    // 3. Prepare productData
+    const productData = products.map((prod) => {
+      const txs = transactions.filter(
+        (t) => String(t.product) === String(prod._id)
+      );
+      return {
+        sku: prod.sku,
+        name: prod.name,
+        currentStock: prod.currentStock,
+        minStockThreshold: prod.minStockThreshold,
+        transactions: txs.map((t) => ({
+          type: t.type,
+          quantity: t.quantity,
+          date: t.date,
+        })),
+      };
+    });
+
+    // Debug: Log the data being sent to AI
+    console.log('Products count:', products.length);
+    console.log('Transactions count:', transactions.length);
+
+    // 4. Build prompt
+    const promptText =
+      `You are an inventory management AI. Analyze each product and suggest reorder quantities based on:
+      - Current stock level
+      - Minimum stock threshold  
+      - Recent transaction patterns (last 60 days)
+      
+      Rules:
+      - If current stock is below minimum threshold, suggest reordering
+      - Consider transaction velocity to determine reorder quantity
+      - Always provide at least one suggestion for testing purposes
+      - If no products actually need reordering, suggest a small quantity for the product with lowest stock ratio
+      
+      Respond as a JSON array: [{ "sku": "", "name": "", "suggestedReorderQty": 0, "reason": "" }]`;
+
+    // 5. Call GenAI client
+    const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+    const result = await genAI.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: [{ role: 'user', parts: [{ text: promptText }, { text: JSON.stringify(productData) }] }],
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              sku: {
+                type: Type.STRING,
+              },
+              name: {
+                type: Type.STRING,
+              },
+              suggestedReorderQty: {
+                type: Type.NUMBER,
+              },
+              reason: {
+                type: Type.STRING,
+              },
+            },
+            required: ['sku', 'name', 'suggestedReorderQty', 'reason'],
+            propertyOrdering: ['sku', 'name', 'suggestedReorderQty', 'reason'],
+          },
+        },
+      },
+      generationConfig: {
+        maxOutputTokens: 8192,
+        temperature: 0.0,
+      },
+    });
+    console.log('Gemini response:', result);
+
+    // 6. Parse structured JSON response
+    let suggestions;
+    try {
+      // Check if we have candidates in the response
+      if (!result.candidates || result.candidates.length === 0) {
+        console.error('AI response was blocked or empty.');
+        return res.status(502).json({
+          success: false,
+          error: 'AI response was blocked or empty.',
+        });
+      }
+
+      // Extract text from the first candidate
+      const candidate = result.candidates[0];
+      const jsonString = candidate.content.parts[0].text;
+      console.log('Raw AI response text:', jsonString);
+      
+      suggestions = JSON.parse(jsonString);
+    } catch (err) {
+      console.error('Failed to parse AI output as JSON:', err);
+      const rawText = result.candidates?.[0]?.content?.parts?.[0]?.text || 'No response text available';
+      return res.status(502).json({
+        success: false,
+        error: 'Invalid or malformed JSON from AI',
+        raw: rawText,
+      });
+    }
+
+    // 7. Return
+    return res.status(200).json({ success: true, data: suggestions });
+  } catch (err) {
+    console.error('Error in getReorderSuggestions:', err);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to get reorder suggestions',
+      error: err.message,
+    });
+  }
+};
+
 module.exports = {
   getProducts,
   getProduct,
@@ -353,5 +600,7 @@ module.exports = {
   getLowStockProducts,
   getOutOfStockProducts,
   updateStock,
-  getProductStats
+  adjustStockWithTransaction,
+  getProductStats,
+  getReorderSuggestions
 }; 

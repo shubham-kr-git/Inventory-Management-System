@@ -4,10 +4,12 @@ import RecentTransactions from '@/components/dashboard/RecentTransactions'
 import LowStockAlerts from '@/components/dashboard/LowStockAlerts'
 import InventoryChart from '@/components/dashboard/InventoryChart'
 import QuickActions from '@/components/dashboard/QuickActions'
+import ReorderBanner from '../components/dashboard/ReorderBanner'
 
 export default function Dashboard() {
   return (
     <div className="space-y-6">
+      <ReorderBanner />
       {/* Page Header */}
       <div className="md:flex md:items-center md:justify-between">
         <div className="flex-1 min-w-0">

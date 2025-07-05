@@ -159,7 +159,13 @@ export default function ProductsPage() {
   const handleStockAdjustment = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      await productsApi.updateStock(stockAdjustment.productId, stockAdjustment.adjustment, stockAdjustment.type)
+      const response = await productsApi.updateStock(
+        stockAdjustment.productId, 
+        stockAdjustment.adjustment, 
+        stockAdjustment.type,
+        `Manual adjustment via dashboard` // reason for transaction
+      )
+      console.log('Stock adjusted successfully. Transaction created:', response.data.transaction)
       await fetchProducts()
       setShowStockModal(false)
     } catch (err) {

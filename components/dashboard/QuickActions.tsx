@@ -11,7 +11,7 @@ export default function QuickActions() {
       color: 'btn-primary',
     },
     {
-      name: 'Record Sale',
+      name: 'Sale Records',
       icon: FiShoppingCart,
       href: '/transactions',
       color: 'btn-secondary',

@@ -9,7 +9,9 @@ const {
   getLowStockProducts,
   getOutOfStockProducts,
   updateStock,
-  getProductStats
+  adjustStockWithTransaction,
+  getProductStats,
+  getReorderSuggestions
 } = require('../controllers/productController');
 
 // GET /api/products - Get all products with pagination and filtering
@@ -24,6 +26,9 @@ router.get('/low-stock', getLowStockProducts);
 // GET /api/products/out-of-stock - Get out of stock products
 router.get('/out-of-stock', getOutOfStockProducts);
 
+// Add AI reorder suggestions endpoint
+router.get('/reorder-suggestions', getReorderSuggestions);
+
 // GET /api/products/:id - Get single product
 router.get('/:id', getProduct);
 
@@ -35,6 +40,9 @@ router.put('/:id', updateProduct);
 
 // PATCH /api/products/:id/stock - Update product stock
 router.patch('/:id/stock', updateStock);
+
+// PATCH /api/products/:id/adjust-stock - Adjust product stock with transaction
+router.patch('/:id/adjust-stock', adjustStockWithTransaction);
 
 // DELETE /api/products/:id - Delete product (soft delete)
 router.delete('/:id', deleteProduct);

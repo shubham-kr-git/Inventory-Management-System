@@ -114,7 +114,7 @@ export interface Transaction {
   };
   referenceNumber: string;
   status: 'pending' | 'completed' | 'cancelled';
-  paymentStatus: 'pending' | 'paid' | 'overdue';
+  paymentStatus: 'pending' | 'paid' | 'overdue' | 'n/a';
   createdAt: string;
   updatedAt: string;
 }
@@ -200,10 +200,10 @@ export const productsApi = {
       method: 'DELETE',
     }),
 
-  updateStock: (id: string, adjustment: number, type: 'add' | 'subtract' | 'set'): Promise<{ success: boolean; data: Product }> =>
-    apiRequest(`/products/${id}/stock`, {
+  updateStock: (id: string, adjustment: number, type: 'add' | 'subtract' | 'set', reason?: string): Promise<{ success: boolean; data: { product: Product; transaction: any } }> =>
+    apiRequest(`/products/${id}/adjust-stock`, {
       method: 'PATCH',
-      body: JSON.stringify({ adjustment, type }),
+      body: JSON.stringify({ quantity: adjustment, type, reason }),
     }),
 
   getLowStock: (): Promise<{ success: boolean; data: Product[] }> =>
@@ -214,6 +214,9 @@ export const productsApi = {
 
   getStats: (): Promise<{ success: boolean; data: any }> =>
     apiRequest('/products/stats'),
+
+  getReorderSuggestions: (): Promise<{ success: boolean; data: any[] }> =>
+    apiRequest('/products/reorder-suggestions'),
 };
 
 // Suppliers API

@@ -17,18 +17,21 @@ const transactionSchema = new mongoose.Schema({
   quantity: {
     type: Number,
     required: [true, 'Quantity is required'],
-    min: [1, 'Quantity must be at least 1'],
     validate: {
       validator: function(v) {
-        return v > 0;
+        // For adjustments, allow negative quantities (subtractions)
+        if (this.type === 'adjustment') {
+          return v !== 0; // Just not zero for adjustments
+        }
+        return v > 0; // Positive for sales/purchases
       },
-      message: 'Quantity must be a positive number'
+      message: 'Quantity must be a non-zero number'
     }
   },
   unitPrice: {
     type: Number,
     required: [true, 'Unit price is required'],
-    min: [0, 'Unit price cannot be negative'],
+    default: 0,
     validate: {
       validator: function(v) {
         return v >= 0;
@@ -39,7 +42,7 @@ const transactionSchema = new mongoose.Schema({
   totalAmount: {
     type: Number,
     required: [true, 'Total amount is required'],
-    min: [0, 'Total amount cannot be negative'],
+    default: 0,
     validate: {
       validator: function(v) {
         return v >= 0;
@@ -104,7 +107,7 @@ const transactionSchema = new mongoose.Schema({
   },
   paymentStatus: {
     type: String,
-    enum: ['paid', 'pending', 'partial', 'overdue'],
+    enum: ['paid', 'pending', 'partial', 'overdue', 'n/a'],
     default: 'paid'
   },
   date: {
@@ -158,6 +161,11 @@ transactionSchema.virtual('summary').get(function() {
   return `${this.type.toUpperCase()}: ${this.quantity} units of product at $${this.unitPrice} each`;
 });
 
+// Virtual for referenceNumber (alias for reference field)
+transactionSchema.virtual('referenceNumber').get(function() {
+  return this.reference;
+});
+
 // Index for better query performance
 transactionSchema.index({ type: 1 });
 transactionSchema.index({ product: 1 });
@@ -168,7 +176,12 @@ transactionSchema.index({ 'customer.name': 1 });
 
 // Pre-save middleware to calculate total amount
 transactionSchema.pre('save', function(next) {
-  if (this.quantity && this.unitPrice) {
+  if (this.type === 'adjustment') {
+    // Adjustments have no monetary value
+    this.totalAmount = 0;
+    this.unitPrice = 0;
+    this.paymentStatus = 'n/a';
+  } else if (this.quantity && this.unitPrice) {
     this.totalAmount = this.quantity * this.unitPrice;
   }
   next();
