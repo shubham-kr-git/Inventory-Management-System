@@ -21,7 +21,11 @@ const corsOptions = {
       process.env.FRONTEND_URL
     ].filter(Boolean);
     
-    if (allowedOrigins.includes(origin)) {
+    // For Railway deployment, allow any railway.app or vercel.app domains
+    const isRailwayDomain = origin && origin.includes('.railway.app');
+    const isVercelDomain = origin && origin.includes('.vercel.app');
+    
+    if (allowedOrigins.includes(origin) || isRailwayDomain || isVercelDomain) {
       callback(null, true);
     } else {
       console.log('CORS blocked origin:', origin);

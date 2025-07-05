@@ -109,3 +109,4 @@ backend/logs/
 # Database
 *.db
 *.sqlite 
+DEPLOYMENT.md
