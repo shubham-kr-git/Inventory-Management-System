@@ -4,7 +4,6 @@ import React, { useState, useEffect } from 'react'
 import { 
   FiUsers, 
   FiPlus, 
-  FiEdit2, 
   FiTrash2, 
   FiAlertCircle,
   FiX,
@@ -46,7 +45,6 @@ export default function SuppliersPage() {
   
   // Modals
   const [showAddModal, setShowAddModal] = useState(false)
-  const [showEditModal, setShowEditModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null)
   
@@ -104,11 +102,7 @@ export default function SuppliersPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      if (showEditModal && selectedSupplier) {
-        await suppliersApi.update(selectedSupplier._id, formData)
-      } else {
-        await suppliersApi.create(formData)
-      }
+      await suppliersApi.create(formData)
       await fetchSuppliers()
       handleCloseModal()
     } catch (err) {
@@ -153,23 +147,7 @@ export default function SuppliersPage() {
     setShowAddModal(true)
   }
 
-  const handleEditSupplier = (supplier: Supplier) => {
-    setSelectedSupplier(supplier)
-    setFormData({
-      name: supplier.name,
-      contactPerson: supplier.contactPerson,
-      email: supplier.email,
-      phone: supplier.phone,
-      address: supplier.address,
-      paymentTerms: supplier.paymentTerms,
-      creditLimit: supplier.creditLimit,
-      currentBalance: supplier.currentBalance,
-      rating: supplier.rating,
-      leadTime: supplier.leadTime,
-      category: supplier.category || []
-    })
-    setShowEditModal(true)
-  }
+
 
   const handleDeleteSupplier = (supplier: Supplier) => {
     setSelectedSupplier(supplier)
@@ -178,7 +156,6 @@ export default function SuppliersPage() {
 
   const handleCloseModal = () => {
     setShowAddModal(false)
-    setShowEditModal(false)
     setShowDeleteModal(false)
     setSelectedSupplier(null)
     setError(null)
@@ -351,13 +328,6 @@ export default function SuppliersPage() {
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex justify-end space-x-2">
                         <button
-                          onClick={() => handleEditSupplier(supplier)}
-                          className="text-indigo-600 hover:text-indigo-900"
-                          title="Edit Supplier"
-                        >
-                          <FiEdit2 className="h-4 w-4" />
-                        </button>
-                        <button
                           onClick={() => handleDeleteSupplier(supplier)}
                           className="text-red-600 hover:text-red-900"
                           title="Delete Supplier"
@@ -374,13 +344,13 @@ export default function SuppliersPage() {
         </div>
       </div>
 
-      {/* Add/Edit Supplier Modal */}
-      {(showAddModal || showEditModal) && (
+      {/* Add Supplier Modal */}
+      {showAddModal && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
           <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-2/3 lg:w-1/2 shadow-lg rounded-md bg-white max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold">
-                {showEditModal ? 'Edit Supplier' : 'Add New Supplier'}
+                Add New Supplier
               </h3>
               <button onClick={handleCloseModal} className="text-gray-400 hover:text-gray-600">
                 <FiX className="h-6 w-6" />
@@ -636,7 +606,7 @@ export default function SuppliersPage() {
                   Cancel
                 </button>
                 <button type="submit" className="btn-primary">
-                  {showEditModal ? 'Update Supplier' : 'Add Supplier'}
+                  Add Supplier
                 </button>
               </div>
             </form>

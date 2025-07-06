@@ -4,7 +4,6 @@ import React, { useState, useEffect } from 'react'
 import { 
   FiPackage, 
   FiPlus, 
-  FiEdit2, 
   FiTrash2, 
   FiUpload,
   FiAlertCircle,
@@ -45,7 +44,6 @@ export default function ProductsPage() {
   
   // Modals
   const [showAddModal, setShowAddModal] = useState(false)
-  const [showEditModal, setShowEditModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [showStockModal, setShowStockModal] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
@@ -110,6 +108,13 @@ export default function ProductsPage() {
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    // Validation: Initial stock must be greater than 0 for new products
+    if (formData.currentStock <= 0) {
+      setError('Initial stock must be greater than 0 when creating a new product. An opening balance transaction will be automatically created to track this inventory.')
+      return
+    }
+    
     try {
       // Send supplier ID directly, backend will populate the supplier object
       const productData = {
@@ -117,13 +122,12 @@ export default function ProductsPage() {
         supplier: formData.supplier // Send just the supplier ID string
       }
 
-      if (showEditModal && selectedProduct) {
-        // For updates, we need to handle supplier as either string or object
-        const updateData = { ...productData } as any;
-        await productsApi.update(selectedProduct._id, updateData)
-      } else {
-        // For creates, use the proper CreateProductData interface
-        await productsApi.create(productData as CreateProductData)
+      // For creates, use the proper CreateProductData interface
+      // This will create both the product and an opening balance transaction
+      const response = await productsApi.create(productData as CreateProductData) as any
+      console.log('Product created successfully:', response.data)
+      if (response.transaction) {
+        console.log('Opening balance transaction created:', response.transaction)
       }
       await fetchProducts()
       handleCloseModal()
@@ -172,28 +176,14 @@ export default function ProductsPage() {
       description: '',
       price: 0,
       costPrice: 0,
-      currentStock: 0,
+      currentStock: 1, // Default to 1 since initial stock must be > 0
       minStockThreshold: 0,
       supplier: ''
     })
     setShowAddModal(true)
   }
 
-  const handleEditProduct = (product: Product) => {
-    setSelectedProduct(product)
-    setFormData({
-      name: product.name,
-      sku: product.sku,
-      category: product.category,
-      description: product.description || '',
-      price: product.price,
-      costPrice: product.costPrice,
-      currentStock: product.currentStock,
-      minStockThreshold: product.minStockThreshold,
-      supplier: product.supplier._id
-    })
-    setShowEditModal(true)
-  }
+
 
   const handleDeleteProduct = (product: Product) => {
     setSelectedProduct(product)
@@ -213,7 +203,6 @@ export default function ProductsPage() {
 
   const handleCloseModal = () => {
     setShowAddModal(false)
-    setShowEditModal(false)
     setShowDeleteModal(false)
     setShowStockModal(false)
     setSelectedProduct(null)
@@ -354,13 +343,6 @@ export default function ProductsPage() {
                           <FiUpload className="h-4 w-4" />
                         </button>
                         <button
-                          onClick={() => handleEditProduct(product)}
-                          className="text-indigo-600 hover:text-indigo-900"
-                          title="Edit Product"
-                        >
-                          <FiEdit2 className="h-4 w-4" />
-                        </button>
-                        <button
                           onClick={() => handleDeleteProduct(product)}
                           className="text-red-600 hover:text-red-900"
                           title="Delete Product"
@@ -377,13 +359,13 @@ export default function ProductsPage() {
         </div>
       </div>
 
-      {/* Add/Edit Product Modal */}
-      {(showAddModal || showEditModal) && (
+      {/* Add Product Modal */}
+      {showAddModal && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
           <div className="relative top-20 mx-auto p-5 border w-96 md:w-1/2 lg:w-1/3 shadow-lg rounded-md bg-white">
             <div className="mt-3">
               <h3 className="text-lg font-medium text-gray-900 mb-4">
-                {showEditModal ? 'Edit Product' : 'Add New Product'}
+                Add New Product
               </h3>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
@@ -482,14 +464,19 @@ export default function ProductsPage() {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Current Stock
+                      <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="number"
+                      min="1"
                       value={formData.currentStock}
                       onChange={(e) => setFormData({ ...formData, currentStock: parseInt(e.target.value) || 0 })}
                       className="input"
                       required
                     />
+                    <p className="mt-1 text-xs text-gray-500">
+                      Must be greater than 0. This will create an opening balance transaction.
+                    </p>
                   </div>
                   
                   <div>
@@ -537,7 +524,7 @@ export default function ProductsPage() {
                     type="submit"
                     className="btn-primary"
                   >
-                    {showEditModal ? 'Update Product' : 'Add Product'}
+                    Add Product
                   </button>
                 </div>
               </form>

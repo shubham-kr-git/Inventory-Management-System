@@ -119,6 +119,28 @@ const createProduct = async (req, res) => {
     const product = await Product.create(req.body);
     console.log('Product created successfully:', product._id);
     
+    // Create opening balance transaction if initial stock > 0
+    let openingBalanceTransaction = null;
+    if (req.body.currentStock && req.body.currentStock > 0) {
+      console.log('Creating opening balance transaction for initial stock:', req.body.currentStock);
+      
+      const transactionData = {
+        type: 'adjustment',
+        product: product._id,
+        quantity: req.body.currentStock,
+        unitPrice: 0, // Adjustments have no monetary value
+        totalAmount: 0, // Will be set automatically by pre-save middleware
+        notes: 'Opening balance - Initial inventory',
+        status: 'completed',
+        paymentStatus: 'n/a',
+        reference: `OPENING-${product.sku}`,
+        date: new Date()
+      };
+      
+      openingBalanceTransaction = await Transaction.create(transactionData);
+      console.log('Opening balance transaction created:', openingBalanceTransaction._id);
+    }
+    
     const populatedProduct = await Product.findById(product._id)
       .populate('supplier', 'name email');
 
@@ -126,7 +148,8 @@ const createProduct = async (req, res) => {
     res.status(201).json({
       success: true,
       data: populatedProduct,
-      message: 'Product created successfully'
+      transaction: openingBalanceTransaction,
+      message: `Product created successfully${openingBalanceTransaction ? ' with opening balance transaction' : ''}`
     });
   } catch (error) {
     console.log('=== CREATE PRODUCT ERROR ===');
