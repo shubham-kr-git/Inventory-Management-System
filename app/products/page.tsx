@@ -4,10 +4,8 @@ import React, { useState, useEffect } from 'react'
 import { 
   FiPackage, 
   FiPlus, 
-  FiSearch, 
   FiEdit2, 
   FiTrash2, 
-  FiFilter,
   FiUpload,
   FiAlertCircle,
   FiCheck,
@@ -41,10 +39,7 @@ export default function ProductsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   
-  // Filters and pagination
-  const [searchTerm, setSearchTerm] = useState('')
-  const [selectedCategory, setSelectedCategory] = useState('')
-  const [selectedSupplier, setSelectedSupplier] = useState('')
+  // Pagination
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage] = useState(10)
   
@@ -82,10 +77,7 @@ export default function ProductsPage() {
       setLoading(true)
       const response = await productsApi.getAll({
         page: currentPage,
-        limit: itemsPerPage,
-        search: searchTerm || undefined,
-        category: selectedCategory || undefined,
-        supplier: selectedSupplier || undefined
+        limit: itemsPerPage
       })
       setProducts(response.data)
       setError(null)
@@ -107,14 +99,13 @@ export default function ProductsPage() {
 
   useEffect(() => {
     fetchProducts()
-  }, [currentPage, searchTerm, selectedCategory, selectedSupplier])
+  }, [currentPage])
 
   useEffect(() => {
     fetchSuppliers()
   }, [])
 
-  // Get unique categories
-  const categories = Array.from(new Set(products.map(p => p.category))).filter(Boolean)
+
 
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
@@ -260,52 +251,7 @@ export default function ProductsPage() {
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="card p-4">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="relative">
-            <FiSearch className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search products..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 input"
-            />
-          </div>
-          <select
-            value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
-            className="input"
-          >
-            <option value="">All Categories</option>
-            {categories.map(category => (
-              <option key={category} value={category}>{category}</option>
-            ))}
-          </select>
-          <select
-            value={selectedSupplier}
-            onChange={(e) => setSelectedSupplier(e.target.value)}
-            className="input"
-          >
-            <option value="">All Suppliers</option>
-            {suppliers.map(supplier => (
-              <option key={supplier._id} value={supplier._id}>{supplier.name}</option>
-            ))}
-          </select>
-          <button
-            onClick={() => {
-              setSearchTerm('')
-              setSelectedCategory('')
-              setSelectedSupplier('')
-            }}
-            className="btn-secondary flex items-center justify-center space-x-2"
-          >
-            <FiX className="h-4 w-4" />
-            <span>Clear</span>
-          </button>
-        </div>
-      </div>
+
 
       {/* Error Message */}
       {error && (

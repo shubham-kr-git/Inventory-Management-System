@@ -2,14 +2,10 @@
 
 import React, { useState, useEffect } from 'react'
 import { 
-  FiBarChart2, 
-  FiFilter,
-  FiCalendar,
   FiTrendingUp,
   FiTrendingDown,
   FiDollarSign,
   FiPackage,
-  FiUsers,
   FiArrowUp,
   FiArrowDown,
   FiActivity
@@ -46,27 +42,17 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   
-  // Filter states
-  const [selectedPeriod, setSelectedPeriod] = useState('30')
-  const [startDate, setStartDate] = useState('')
-  const [endDate, setEndDate] = useState('')
-  const [reportType, setReportType] = useState('overview')
+
 
   // Fetch report data
   const fetchReportData = async () => {
     try {
       setLoading(true)
       
-      // Calculate date range
+      // Use default date range (last 30 days)
       const end = new Date()
       const start = new Date()
-      
-      if (startDate && endDate) {
-        start.setTime(new Date(startDate).getTime())
-        end.setTime(new Date(endDate).getTime())
-      } else {
-        start.setDate(end.getDate() - parseInt(selectedPeriod))
-      }
+      start.setDate(end.getDate() - 30)
 
       const [dashboardStats, transactionStats, products] = await Promise.all([
         dashboardApi.getStats(),
@@ -155,14 +141,7 @@ export default function ReportsPage() {
 
   useEffect(() => {
     fetchReportData()
-  }, [selectedPeriod, startDate, endDate])
-
-  const reportTypes = [
-    { value: 'overview', label: 'Overview', icon: FiBarChart2 },
-    { value: 'sales', label: 'Sales Report', icon: FiTrendingUp },
-    { value: 'inventory', label: 'Inventory Report', icon: FiPackage },
-    { value: 'suppliers', label: 'Supplier Report', icon: FiUsers }
-  ]
+  }, [])
 
   const StatCard = ({ 
     title, 
@@ -229,62 +208,7 @@ export default function ReportsPage() {
 
       </div>
 
-      {/* Filters */}
-      <div className="card p-4">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Report Type
-            </label>
-            <select
-              value={reportType}
-              onChange={(e) => setReportType(e.target.value)}
-              className="input"
-            >
-              {reportTypes.map(type => (
-                <option key={type.value} value={type.value}>{type.label}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Time Period
-            </label>
-            <select
-              value={selectedPeriod}
-              onChange={(e) => setSelectedPeriod(e.target.value)}
-              className="input"
-            >
-              <option value="7">Last 7 days</option>
-              <option value="30">Last 30 days</option>
-              <option value="90">Last 3 months</option>
-              <option value="365">Last year</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Start Date
-            </label>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="input"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              End Date
-            </label>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="input"
-            />
-        </div>
-        </div>
-      </div>
+
 
       {error && (
         <div className="bg-red-50 border-l-4 border-red-400 p-4">
@@ -487,60 +411,7 @@ export default function ReportsPage() {
             </div>
           </div>
 
-          {/* Detailed Reports Table */}
-          {reportType === 'sales' && (
-            <div className="card overflow-hidden">
-              <div className="px-6 py-4 border-b border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Detailed Sales Report
-                </h3>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Month
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Sales
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Purchases
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Profit
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Margin
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {reportData.monthlySales.map((month, index) => (
-                      <tr key={index} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {month.month}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          ${month.sales.toLocaleString()}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          ${month.purchases.toLocaleString()}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          ${month.profit.toLocaleString()}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {((month.profit / month.sales) * 100).toFixed(1)}%
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
+
         </>
       )}
     </div>

@@ -4,7 +4,6 @@ import React, { useState, useEffect } from 'react'
 import { 
   FiUsers, 
   FiPlus, 
-  FiSearch, 
   FiEdit2, 
   FiTrash2, 
   FiAlertCircle,
@@ -41,9 +40,7 @@ export default function SuppliersPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   
-  // Filters and pagination
-  const [searchTerm, setSearchTerm] = useState('')
-  const [selectedCategory, setSelectedCategory] = useState('')
+  // Pagination
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage] = useState(10)
   
@@ -86,9 +83,7 @@ export default function SuppliersPage() {
       setLoading(true)
       const response = await suppliersApi.getAll({
         page: currentPage,
-        limit: itemsPerPage,
-        search: searchTerm || undefined,
-        category: selectedCategory || undefined
+        limit: itemsPerPage
       })
       setSuppliers(response.data)
       setError(null)
@@ -101,10 +96,9 @@ export default function SuppliersPage() {
 
   useEffect(() => {
     fetchSuppliers()
-  }, [currentPage, searchTerm, selectedCategory])
+  }, [currentPage])
 
-  // Get unique categories from suppliers
-  const categories = Array.from(new Set(suppliers.flatMap(s => s.category || []))).filter(Boolean)
+
 
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
@@ -234,41 +228,7 @@ export default function SuppliersPage() {
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="card p-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="relative">
-            <FiSearch className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search suppliers..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 input"
-            />
-          </div>
-          <select
-            value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
-            className="input"
-          >
-            <option value="">All Categories</option>
-            {categories.map(category => (
-              <option key={category} value={category}>{category}</option>
-            ))}
-          </select>
-          <button
-            onClick={() => {
-              setSearchTerm('')
-              setSelectedCategory('')
-            }}
-            className="btn-secondary flex items-center justify-center space-x-2"
-          >
-            <FiX className="h-4 w-4" />
-            <span>Clear</span>
-          </button>
-        </div>
-      </div>
+
 
       {/* Error Message */}
       {error && (
