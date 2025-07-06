@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { 
   FiPackage, 
@@ -33,12 +33,39 @@ interface StockAdjustment {
   type: 'add' | 'subtract' | 'set';
 }
 
-export default function ProductsPage() {
+interface ProductsContentProps {
+  onReorderAction: (sku: string, qty: string, productName: string) => void;
+  reorderData?: {
+    sku: string;
+    qty: string;
+    productName: string;
+  } | null;
+  onReorderComplete?: () => void;
+}
+
+// Component that handles search params
+function ReorderHandler({ onReorderAction }: { onReorderAction: (sku: string, qty: string, productName: string) => void }) {
+  const searchParams = useSearchParams()
+
+  useEffect(() => {
+    const isReorder = searchParams.get('reorder')
+    const sku = searchParams.get('sku')
+    const qty = searchParams.get('qty')
+    const productName = searchParams.get('productName')
+
+    if (isReorder === 'true' && sku && qty && productName) {
+      onReorderAction(sku, qty, productName)
+    }
+  }, [searchParams, onReorderAction])
+
+  return null
+}
+
+function ProductsContent({ onReorderAction, reorderData, onReorderComplete }: ProductsContentProps) {
   const [products, setProducts] = useState<Product[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const searchParams = useSearchParams()
   
   // Pagination
   const [currentPage, setCurrentPage] = useState(1)
@@ -107,38 +134,6 @@ export default function ProductsPage() {
     fetchSuppliers()
   }, [])
 
-  // Handle reorder parameters from ReorderBanner
-  useEffect(() => {
-    const isReorder = searchParams.get('reorder')
-    const sku = searchParams.get('sku')
-    const qty = searchParams.get('qty')
-    const productName = searchParams.get('productName')
-
-    if (isReorder === 'true' && sku && qty && productName) {
-      // Find the product by SKU
-      const product = products.find(p => p.sku === sku)
-      
-      if (product) {
-        // Set up stock adjustment with reorder suggestion
-        setStockAdjustment({
-          productId: product._id,
-          productName: product.name,
-          currentStock: product.currentStock,
-          adjustment: parseInt(qty),
-          type: 'add'
-        })
-        setShowStockModal(true)
-        setIsReorderAction(true)
-        
-        // Clean up URL parameters
-        window.history.replaceState({}, '', '/products')
-      } else if (products.length > 0) {
-        // Product not found on current page - search for it
-        searchAndOpenStockModal(sku, qty, productName)
-      }
-    }
-  }, [searchParams, products])
-
   // Search for product and open stock modal
   const searchAndOpenStockModal = async (sku: string, qty: string, productName: string) => {
     try {
@@ -175,6 +170,41 @@ export default function ProductsPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  // Handle reorder data from parent component
+  useEffect(() => {
+    if (reorderData && products.length > 0) {
+      const { sku, qty, productName } = reorderData
+      // Find the product by SKU
+      const product = products.find(p => p.sku === sku)
+      
+      if (product) {
+        // Set up stock adjustment with reorder suggestion
+        setStockAdjustment({
+          productId: product._id,
+          productName: product.name,
+          currentStock: product.currentStock,
+          adjustment: parseInt(qty),
+          type: 'add'
+        })
+        setShowStockModal(true)
+        setIsReorderAction(true)
+        
+        // Clean up URL parameters
+        window.history.replaceState({}, '', '/products')
+      } else {
+        // Product not found on current page - search for it
+        searchAndOpenStockModal(sku, qty, productName)
+      }
+      onReorderComplete?.()
+    }
+  }, [reorderData, products])
+
+  // Handle reorder action from ReorderHandler (keeping for backward compatibility)
+  const handleReorderAction = (sku: string, qty: string, productName: string) => {
+    // This is now handled by the useEffect above when reorderData changes
+    // But we keep this function for any direct calls
   }
 
 
@@ -473,24 +503,13 @@ export default function ProductsPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Category
                   </label>
-                  <select
+                  <input
+                    type="text"
                     value={formData.category}
                     onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                     className="input"
                     required
-                  >
-                    <option value="">Select Category</option>
-                    <option value="Electronics">Electronics</option>
-                    <option value="Furniture">Furniture</option>
-                    <option value="Stationery">Stationery</option>
-                    <option value="Clothing">Clothing</option>
-                    <option value="Books">Books</option>
-                    <option value="Sports">Sports</option>
-                    <option value="Home & Garden">Home & Garden</option>
-                    <option value="Automotive">Automotive</option>
-                    <option value="Health & Beauty">Health & Beauty</option>
-                    <option value="Other">Other</option>
-                  </select>
+                  />
                 </div>
                 
                 <div>
@@ -726,6 +745,32 @@ export default function ProductsPage() {
           </div>
         </div>
       )}
+
+    </div>
+  )
+}
+
+export default function ProductsPage() {
+  const [reorderData, setReorderData] = useState<{
+    sku: string;
+    qty: string;
+    productName: string;
+  } | null>(null)
+
+  const handleReorderAction = (sku: string, qty: string, productName: string) => {
+    setReorderData({ sku, qty, productName })
+  }
+
+  return (
+    <div>
+      <Suspense fallback={<div className="space-y-6"><div className="animate-pulse bg-gray-200 h-8 w-64 rounded"></div><div className="animate-pulse bg-gray-200 h-64 w-full rounded"></div></div>}>
+        <ReorderHandler onReorderAction={handleReorderAction} />
+      </Suspense>
+      <ProductsContent 
+        onReorderAction={handleReorderAction}
+        reorderData={reorderData}
+        onReorderComplete={() => setReorderData(null)}
+      />
     </div>
   )
 } 
