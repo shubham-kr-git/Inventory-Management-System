@@ -177,10 +177,13 @@ transactionSchema.index({ 'customer.name': 1 });
 // Pre-save middleware to calculate total amount
 transactionSchema.pre('save', function(next) {
   if (this.type === 'adjustment') {
-    // Adjustments have no monetary value
-    this.totalAmount = 0;
-    this.unitPrice = 0;
+    // All adjustments now keep their monetary value for proper inventory valuation
     this.paymentStatus = 'n/a';
+    // Keep the unitPrice and totalAmount as provided
+    // If not provided, calculate totalAmount from quantity and unitPrice
+    if (this.quantity && this.unitPrice && !this.totalAmount) {
+      this.totalAmount = Math.abs(this.quantity) * this.unitPrice;
+    }
   } else if (this.quantity && this.unitPrice) {
     this.totalAmount = this.quantity * this.unitPrice;
   }

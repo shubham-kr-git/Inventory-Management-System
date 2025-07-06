@@ -123,13 +123,17 @@ const createProduct = async (req, res) => {
     let openingBalanceTransaction = null;
     if (req.body.currentStock && req.body.currentStock > 0) {
       console.log('Creating opening balance transaction for initial stock:', req.body.currentStock);
+      console.log('Using cost price for opening balance:', req.body.costPrice);
+      
+      const unitPrice = req.body.costPrice || 0;
+      const totalAmount = req.body.currentStock * unitPrice;
       
       const transactionData = {
         type: 'adjustment',
         product: product._id,
         quantity: req.body.currentStock,
-        unitPrice: 0, // Adjustments have no monetary value
-        totalAmount: 0, // Will be set automatically by pre-save middleware
+        unitPrice: unitPrice, // Use cost price for opening balance valuation
+        totalAmount: totalAmount, // Calculate total value of opening inventory
         notes: 'Opening balance - Initial inventory',
         status: 'completed',
         paymentStatus: 'n/a',
@@ -139,6 +143,7 @@ const createProduct = async (req, res) => {
       
       openingBalanceTransaction = await Transaction.create(transactionData);
       console.log('Opening balance transaction created:', openingBalanceTransaction._id);
+      console.log('Transaction value:', `${req.body.currentStock} units @ $${unitPrice} = $${totalAmount}`);
     }
     
     const populatedProduct = await Product.findById(product._id)
@@ -395,12 +400,19 @@ const adjustStockWithTransaction = async (req, res) => {
     
     // Create transaction record first
     const Transaction = require('../models/Transaction');
+    
+    // Use cost price for adjustments to track financial impact
+    const unitPrice = product.costPrice || 0;
+    const totalAmount = Math.abs(actualQuantityChange) * unitPrice;
+    
+    console.log(`Transaction pricing: ${Math.abs(actualQuantityChange)} units @ $${unitPrice} = $${totalAmount}`);
+    
     const transactionData = {
       type: 'adjustment',
       product: product._id,
       quantity: actualQuantityChange, // Positive for additions, negative for subtractions
-      unitPrice: 0, // Adjustments have no monetary value
-      totalAmount: 0, // Adjustments have no monetary value
+      unitPrice: unitPrice, // Use product cost price for proper valuation
+      totalAmount: totalAmount, // Calculate total value impact
       supplier: productWithSupplier.supplier._id, // Include supplier from product
       reference: referenceNumber,
       notes: `Stock adjustment: ${type} ${Math.abs(quantity)} units${reason ? ` (${reason})` : ''}`,
