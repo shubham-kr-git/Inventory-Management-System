@@ -119,6 +119,23 @@ export interface Transaction {
   updatedAt: string;
 }
 
+// Interface for creating transactions - uses string IDs for product and supplier
+export interface CreateTransactionData {
+  type: 'purchase' | 'sale' | 'adjustment' | 'return';
+  product: string; // Product ID
+  quantity: number;
+  unitPrice: number;
+  totalAmount?: number;
+  customer?: {
+    name: string;
+    email?: string;
+    phone?: string;
+  };
+  supplier?: string; // Supplier ID
+  status: 'pending' | 'completed' | 'cancelled';
+  paymentStatus: 'pending' | 'paid' | 'overdue' | 'n/a';
+}
+
 export interface DashboardStats {
   totalProducts: number;
   lowStockCount: number;
@@ -299,7 +316,7 @@ export const transactionsApi = {
   getById: (id: string): Promise<{ success: boolean; data: Transaction }> =>
     apiRequest(`/transactions/${id}`),
 
-  create: (transaction: Omit<Transaction, '_id' | 'createdAt' | 'updatedAt' | 'referenceNumber'>): Promise<{ success: boolean; data: Transaction }> =>
+  create: (transaction: CreateTransactionData): Promise<{ success: boolean; data: Transaction }> =>
     apiRequest('/transactions', {
       method: 'POST',
       body: JSON.stringify(transaction),

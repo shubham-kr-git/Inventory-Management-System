@@ -18,23 +18,10 @@ import {
   FiArrowUp,
   FiArrowDown
 } from 'react-icons/fi'
-import { transactionsApi, productsApi, suppliersApi, Transaction, Product, Supplier } from '../../lib/api'
+import { transactionsApi, productsApi, suppliersApi, Transaction, Product, Supplier, CreateTransactionData } from '../../lib/api'
 
-interface TransactionFormData {
-  type: 'purchase' | 'sale' | 'adjustment' | 'return';
-  product: string;
-  quantity: number;
-  unitPrice: number;
-  totalAmount?: number;
-  customer?: {
-    name: string;
-    email?: string;
-    phone?: string;
-  };
-  supplier?: string;
-  status: 'pending' | 'completed' | 'cancelled';
-  paymentStatus: 'pending' | 'paid' | 'overdue';
-}
+// Use the CreateTransactionData interface from api.ts
+type TransactionFormData = CreateTransactionData;
 
 export default function TransactionsPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([])
