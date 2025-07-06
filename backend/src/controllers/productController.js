@@ -1,7 +1,6 @@
 const Product = require('../models/Product');
 const Supplier = require('../models/Supplier');
 const Transaction = require('../models/Transaction');
-const axios = require('axios');
 const {
   GoogleGenAI,
   Type,
