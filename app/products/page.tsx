@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { 
   FiPackage, 
   FiPlus, 
@@ -37,6 +38,7 @@ export default function ProductsPage() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const searchParams = useSearchParams()
   
   // Pagination
   const [currentPage, setCurrentPage] = useState(1)
@@ -68,6 +70,8 @@ export default function ProductsPage() {
     adjustment: 0,
     type: 'add'
   })
+
+  const [isReorderAction, setIsReorderAction] = useState(false)
 
   // Fetch data
   const fetchProducts = async () => {
@@ -103,6 +107,75 @@ export default function ProductsPage() {
     fetchSuppliers()
   }, [])
 
+  // Handle reorder parameters from ReorderBanner
+  useEffect(() => {
+    const isReorder = searchParams.get('reorder')
+    const sku = searchParams.get('sku')
+    const qty = searchParams.get('qty')
+    const productName = searchParams.get('productName')
+
+    if (isReorder === 'true' && sku && qty && productName) {
+      // Find the product by SKU
+      const product = products.find(p => p.sku === sku)
+      
+      if (product) {
+        // Set up stock adjustment with reorder suggestion
+        setStockAdjustment({
+          productId: product._id,
+          productName: product.name,
+          currentStock: product.currentStock,
+          adjustment: parseInt(qty),
+          type: 'add'
+        })
+        setShowStockModal(true)
+        setIsReorderAction(true)
+        
+        // Clean up URL parameters
+        window.history.replaceState({}, '', '/products')
+      } else if (products.length > 0) {
+        // Product not found on current page - search for it
+        searchAndOpenStockModal(sku, qty, productName)
+      }
+    }
+  }, [searchParams, products])
+
+  // Search for product and open stock modal
+  const searchAndOpenStockModal = async (sku: string, qty: string, productName: string) => {
+    try {
+      setLoading(true)
+      const response = await productsApi.getAll({
+        search: sku,
+        limit: 100 // Search through more products
+      })
+      
+      const product = response.data.find(p => p.sku === sku)
+      
+      if (product) {
+        // Update current products with search results
+        setProducts(response.data)
+        
+        // Set up stock adjustment with reorder suggestion
+        setStockAdjustment({
+          productId: product._id,
+          productName: product.name,
+          currentStock: product.currentStock,
+          adjustment: parseInt(qty),
+          type: 'add'
+        })
+        setShowStockModal(true)
+        setIsReorderAction(true)
+        
+        // Clean up URL parameters
+        window.history.replaceState({}, '', '/products')
+      } else {
+        setError(`Product with SKU "${sku}" not found. Please verify the SKU and try again.`)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to search for product')
+    } finally {
+      setLoading(false)
+    }
+  }
 
 
   // Handle form submission
@@ -198,6 +271,7 @@ export default function ProductsPage() {
       adjustment: 0,
       type: 'add'
     })
+    setIsReorderAction(false)
     setShowStockModal(true)
   }
 
@@ -206,6 +280,7 @@ export default function ProductsPage() {
     setShowDeleteModal(false)
     setShowStockModal(false)
     setSelectedProduct(null)
+    setIsReorderAction(false)
     setError(null)
   }
 
@@ -570,8 +645,20 @@ export default function ProductsPage() {
           <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
             <div className="mt-3">
               <h3 className="text-lg font-medium text-gray-900 mb-4">
-                Adjust Stock - {stockAdjustment.productName}
+                {isReorderAction ? '🤖 AI Reorder Suggestion' : 'Adjust Stock'} - {stockAdjustment.productName}
               </h3>
+              {isReorderAction && (
+                <div className="bg-blue-50 border-l-4 border-blue-400 p-3 mb-4">
+                  <div className="flex">
+                    <div className="ml-3">
+                      <p className="text-sm text-blue-700">
+                        <strong>AI Recommendation:</strong> Add {stockAdjustment.adjustment} units to restock this item.
+                        You can adjust the quantity below if needed.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
               <form onSubmit={handleStockAdjustment} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -631,7 +718,7 @@ export default function ProductsPage() {
                     type="submit"
                     className="btn-primary"
                   >
-                    Update Stock
+                    {isReorderAction ? 'Reorder Stock' : 'Update Stock'}
                   </button>
                 </div>
               </form>

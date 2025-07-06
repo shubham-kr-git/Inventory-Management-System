@@ -4,23 +4,17 @@ import React, { useState, useEffect } from 'react'
 import { 
   FiTrendingUp, 
   FiPlus, 
-  FiSearch, 
   FiEdit2, 
   FiTrash2, 
   FiAlertCircle,
   FiX,
-  FiFilter,
-  FiCalendar,
   FiDollarSign,
   FiPackage,
   FiUsers,
   FiArrowUp,
   FiArrowDown
 } from 'react-icons/fi'
-import { transactionsApi, productsApi, suppliersApi, Transaction, Product, Supplier, CreateTransactionData } from '../../lib/api'
-
-// Use the CreateTransactionData interface from api.ts
-type TransactionFormData = CreateTransactionData;
+import { transactionsApi, productsApi, suppliersApi, Transaction, Product, Supplier } from '../../lib/api'
 
 export default function TransactionsPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([])
@@ -29,30 +23,11 @@ export default function TransactionsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   
-  // Filters and pagination
-  const [searchTerm, setSearchTerm] = useState('')
-  const [selectedType, setSelectedType] = useState('')
-  const [selectedStatus, setSelectedStatus] = useState('')
-  const [selectedProduct, setSelectedProduct] = useState('')
-  const [startDate, setStartDate] = useState('')
-  const [endDate, setEndDate] = useState('')
+  // Pagination
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage] = useState(10)
   
-  // Modal states - only keep add modal
-  const [showAddModal, setShowAddModal] = useState(false)
-  
-  // Form state
-  const [formData, setFormData] = useState<TransactionFormData>({
-    type: 'purchase',
-    product: '',
-    quantity: 1,
-    unitPrice: 0,
-    customer: { name: '', email: '', phone: '' },
-    supplier: '',
-    status: 'completed',
-    paymentStatus: 'paid'
-  })
+
 
   // Transaction types
   const transactionTypes = [
@@ -68,12 +43,7 @@ export default function TransactionsPage() {
       setLoading(true)
       const response = await transactionsApi.getAll({
         page: currentPage,
-        limit: itemsPerPage,
-        type: selectedType || undefined,
-        status: selectedStatus || undefined,
-        product: selectedProduct || undefined,
-        startDate: startDate || undefined,
-        endDate: endDate || undefined
+        limit: itemsPerPage
       })
       setTransactions(response.data)
       setError(null)
@@ -104,63 +74,14 @@ export default function TransactionsPage() {
 
   useEffect(() => {
     fetchTransactions()
-  }, [currentPage, selectedType, selectedStatus, selectedProduct, startDate, endDate])
+  }, [currentPage])
 
   useEffect(() => {
     fetchProducts()
     fetchSuppliers()
   }, [])
 
-  // Handle form submission - only for creating new transactions
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    try {
-      // Clean up customer data if it's a sale transaction
-      const submitData = { ...formData }
-      
-      // Calculate total amount
-      submitData.totalAmount = formData.quantity * formData.unitPrice
-      
-      if (submitData.type === 'sale') {
-        if (!submitData.customer?.name) {
-          submitData.customer = undefined
-        }
-      } else {
-        submitData.customer = undefined
-      }
-      
-      // Remove supplier for sales and adjustments
-      if (submitData.type === 'sale' || submitData.type === 'adjustment') {
-        submitData.supplier = undefined
-      }
 
-      await transactionsApi.create(submitData)
-      await fetchTransactions()
-      handleCloseModal()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create transaction')
-    }
-  }
-
-  // Modal handlers - simplified
-  const handleAddTransaction = () => {
-    setFormData({
-      type: 'purchase',
-      product: '',
-      quantity: 1,
-      unitPrice: 0,
-      customer: { name: '', email: '', phone: '' },
-      supplier: '',
-      status: 'completed',
-      paymentStatus: 'paid'
-    })
-    setShowAddModal(true)
-  }
-
-  const handleCloseModal = () => {
-    setShowAddModal(false)
-    setError(null)
-  }
 
   const getTransactionTypeConfig = (type: string) => {
     return transactionTypes.find(t => t.value === type) || transactionTypes[0]
@@ -185,13 +106,7 @@ export default function TransactionsPage() {
     }
   }
 
-  const clearFilters = () => {
-    setSelectedType('')
-    setSelectedStatus('')
-    setSelectedProduct('')
-    setStartDate('')
-    setEndDate('')
-  }
+
 
   return (
     <div className="space-y-6">
@@ -208,87 +123,7 @@ export default function TransactionsPage() {
 
       </div>
 
-      {/* Filters */}
-      <div className="card p-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Transaction Type
-            </label>
-            <select
-              value={selectedType}
-              onChange={(e) => setSelectedType(e.target.value)}
-              className="input"
-            >
-              <option value="">All Types</option>
-              {transactionTypes.map(type => (
-                <option key={type.value} value={type.value}>{type.label}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Status
-            </label>
-            <select
-              value={selectedStatus}
-              onChange={(e) => setSelectedStatus(e.target.value)}
-              className="input"
-            >
-              <option value="">All Status</option>
-              <option value="pending">Pending</option>
-              <option value="completed">Completed</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Product
-            </label>
-            <select
-              value={selectedProduct}
-              onChange={(e) => setSelectedProduct(e.target.value)}
-              className="input"
-            >
-              <option value="">All Products</option>
-              {products.map(product => (
-                <option key={product._id} value={product._id}>{product.name}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Start Date
-            </label>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="input"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              End Date
-            </label>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="input"
-            />
-          </div>
-          <div className="flex items-end">
-            <button
-              onClick={clearFilters}
-              className="btn-secondary flex items-center justify-center space-x-2 w-full"
-            >
-              <FiX className="h-4 w-4" />
-              <span>Clear</span>
-            </button>
-          </div>
-        </div>
-      </div>
+
 
       {/* Error Message */}
       {error && (
@@ -406,225 +241,7 @@ export default function TransactionsPage() {
         </div>
       </div>
 
-      {/* Add Transaction Modal - Edit and Delete modals removed */}
-      {showAddModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-2/3 lg:w-1/2 shadow-lg rounded-md bg-white max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">
-                Record New Transaction
-              </h3>
-              <button onClick={handleCloseModal} className="text-gray-400 hover:text-gray-600">
-                <FiX className="h-6 w-6" />
-              </button>
-            </div>
-            
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Transaction Type and Product */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Transaction Type *
-                  </label>
-                  <select
-                    required
-                    value={formData.type}
-                    onChange={(e) => setFormData({ ...formData, type: e.target.value as any })}
-                    className="input"
-                  >
-                    {transactionTypes.map(type => (
-                      <option key={type.value} value={type.value}>{type.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Product *
-                  </label>
-                  <select
-                    required
-                    value={formData.product}
-                    onChange={(e) => setFormData({ ...formData, product: e.target.value })}
-                    className="input"
-                  >
-                    <option value="">Select product</option>
-                    {products.map(product => (
-                      <option key={product._id} value={product._id}>
-                        {product.name} (SKU: {product.sku})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
 
-              {/* Quantity and Unit Price */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Quantity *
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    required
-                    value={formData.quantity}
-                    onChange={(e) => setFormData({ ...formData, quantity: parseInt(e.target.value) })}
-                    className="input"
-                    placeholder="1"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Unit Price *
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    required
-                    value={formData.unitPrice}
-                    onChange={(e) => setFormData({ ...formData, unitPrice: parseFloat(e.target.value) })}
-                    className="input"
-                    placeholder="0.00"
-                  />
-                </div>
-              </div>
-
-              {/* Total Amount Display */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Total Amount
-                </label>
-                <input
-                  type="text"
-                  value={`$${(formData.quantity * formData.unitPrice).toFixed(2)}`}
-                  disabled
-                  className="input bg-gray-100"
-                />
-              </div>
-
-              {/* Conditional Fields Based on Transaction Type */}
-              {(formData.type === 'purchase' || formData.type === 'return') && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Supplier
-                  </label>
-                  <select
-                    value={formData.supplier}
-                    onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
-                    className="input"
-                  >
-                    <option value="">Select supplier</option>
-                    {suppliers.map(supplier => (
-                      <option key={supplier._id} value={supplier._id}>
-                        {supplier.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {formData.type === 'sale' && (
-                <div>
-                  <h4 className="text-md font-medium text-gray-900 mb-3">Customer Information</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Customer Name
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.customer?.name || ''}
-                        onChange={(e) => setFormData({ 
-                          ...formData, 
-                          customer: { ...formData.customer!, name: e.target.value }
-                        })}
-                        className="input"
-                        placeholder="Enter customer name"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Email
-                      </label>
-                      <input
-                        type="email"
-                        value={formData.customer?.email || ''}
-                        onChange={(e) => setFormData({ 
-                          ...formData, 
-                          customer: { ...formData.customer!, email: e.target.value }
-                        })}
-                        className="input"
-                        placeholder="Enter email"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Phone
-                      </label>
-                      <input
-                        type="tel"
-                        value={formData.customer?.phone || ''}
-                        onChange={(e) => setFormData({ 
-                          ...formData, 
-                          customer: { ...formData.customer!, phone: e.target.value }
-                        })}
-                        className="input"
-                        placeholder="Enter phone"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Status Fields */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Transaction Status
-                  </label>
-                  <select
-                    value={formData.status}
-                    onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
-                    className="input"
-                  >
-                    <option value="pending">Pending</option>
-                    <option value="completed">Completed</option>
-                    <option value="cancelled">Cancelled</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Payment Status
-                  </label>
-                  <select
-                    value={formData.paymentStatus}
-                    onChange={(e) => setFormData({ ...formData, paymentStatus: e.target.value as any })}
-                    className="input"
-                  >
-                    <option value="pending">Pending</option>
-                    <option value="paid">Paid</option>
-                    <option value="overdue">Overdue</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="flex justify-end space-x-3 pt-4">
-                <button
-                  type="button"
-                  onClick={handleCloseModal}
-                  className="btn-secondary"
-                >
-                  Cancel
-                </button>
-                <button type="submit" className="btn-primary">
-                  Record Transaction
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   )
 } 

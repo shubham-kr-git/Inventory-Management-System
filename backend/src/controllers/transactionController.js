@@ -167,6 +167,13 @@ const createTransaction = async (req, res) => {
     // Update product stock
     if (req.body.type === 'purchase') {
       await product.updateStock(req.body.quantity, 'add');
+      
+      // Update supplier balance for purchase transactions
+      const supplier = await Supplier.findById(req.body.supplier);
+      if (supplier) {
+        await supplier.updateBalance(transaction.totalAmount, 'add');
+        console.log(`Updated supplier ${supplier.name} balance by $${transaction.totalAmount}`);
+      }
     } else if (req.body.type === 'sale') {
       await product.updateStock(req.body.quantity, 'subtract');
     }
