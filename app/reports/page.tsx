@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from 'react'
 import { 
   FiBarChart2, 
-  FiDownload, 
   FiFilter,
   FiCalendar,
   FiTrendingUp,
@@ -75,38 +74,77 @@ export default function ReportsPage() {
         productsApi.getLowStock()
       ])
 
-      // Mock report data (in real app, this would come from API)
-      const mockReportData: ReportData = {
-        totalSales: dashboardStats.data.monthlySales || 45000,
-        totalPurchases: dashboardStats.data.monthlyPurchases || 32000,
-        profitMargin: 28.9,
-        inventoryValue: dashboardStats.data.totalInventoryValue || 125000,
-        topProducts: [
-          { name: 'Wireless Headphones', sales: 150, revenue: 22500 },
-          { name: 'Smartphone Case', sales: 230, revenue: 11500 },
-          { name: 'USB Cable', sales: 180, revenue: 3600 },
-          { name: 'Power Bank', sales: 95, revenue: 9500 },
-          { name: 'Bluetooth Speaker', sales: 75, revenue: 7500 }
+      // Calculate total sales from monthly sales data
+      const totalSales = Array.isArray(dashboardStats.data.monthlySales) 
+        ? dashboardStats.data.monthlySales.reduce((sum: number, month: any) => sum + (month.totalAmount || 0), 0)
+        : dashboardStats.data.monthlySales || 0;
+      
+      // Get real purchase data from transaction stats
+      const totalPurchases = transactionStats.data?.purchases?.totalAmount || 0;
+
+      // Transform real API data into report format
+      const realTopProducts = dashboardStats.data.topProducts || [];
+      const topProducts = realTopProducts.map((product: any) => ({
+        name: product.name || 'Unknown Product',
+        sales: product.totalQuantity || 0,
+        revenue: product.totalAmount || 0
+      }));
+
+      // Get real supplier data from API
+      const realTopSuppliers = dashboardStats.data.topSuppliers || [];
+      const topSuppliers = realTopSuppliers.map((supplier: any) => ({
+        name: supplier.name || 'Unknown Supplier',
+        orders: supplier.orderCount || 0,
+        totalValue: supplier.totalAmount || 0
+      }));
+
+      // If no real suppliers found, show fallback message
+      const suppliersToShow = topSuppliers.length > 0 ? topSuppliers : [
+        { name: 'No supplier data available', orders: 0, totalValue: 0 }
+      ];
+
+      // Transform monthly sales and purchases data
+      const realMonthlySales = dashboardStats.data.monthlySales || [];
+      const realMonthlyPurchases = dashboardStats.data.monthlyPurchases || [];
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      
+      // Create a complete monthly data set with real sales and purchases
+      const completeMonthlySales = monthNames.map((month, index) => {
+        const monthIndex = index + 1;
+        const salesData = realMonthlySales.find((m: any) => m._id === monthIndex);
+        const purchasesData = realMonthlyPurchases.find((m: any) => m._id === monthIndex);
+        
+        const salesAmount = salesData?.totalAmount || 0;
+        const purchasesAmount = purchasesData?.totalAmount || 0;
+        const profit = salesAmount - purchasesAmount;
+        
+        return {
+          month,
+          sales: salesAmount,
+          purchases: purchasesAmount,
+          profit: profit
+        };
+      });
+
+      // Calculate profit margin from financial data
+      const profitMargin = totalSales > 0 ? ((totalSales - totalPurchases) / totalSales * 100) : 0;
+
+      // Real report data using actual API responses
+      const reportData: ReportData = {
+        totalSales: totalSales,
+        totalPurchases: totalPurchases,
+        profitMargin: parseFloat(profitMargin.toFixed(1)),
+        inventoryValue: dashboardStats.data.overview?.totalInventoryValue || dashboardStats.data.totalInventoryValue || 0,
+        topProducts: topProducts.length > 0 ? topProducts.slice(0, 5) : [
+          { name: 'No sales data available', sales: 0, revenue: 0 }
         ],
-        topSuppliers: [
-          { name: 'TechCorp Ltd', orders: 25, totalValue: 15000 },
-          { name: 'Electronics Plus', orders: 18, totalValue: 12000 },
-          { name: 'Supply Chain Co', orders: 22, totalValue: 10500 },
-          { name: 'Global Parts', orders: 15, totalValue: 8000 }
-        ],
-        monthlySales: [
-          { month: 'Jan', sales: 38000, purchases: 28000, profit: 10000 },
-          { month: 'Feb', sales: 42000, purchases: 30000, profit: 12000 },
-          { month: 'Mar', sales: 45000, purchases: 32000, profit: 13000 },
-          { month: 'Apr', sales: 41000, purchases: 29000, profit: 12000 },
-          { month: 'May', sales: 47000, purchases: 33000, profit: 14000 },
-          { month: 'Jun', sales: 50000, purchases: 35000, profit: 15000 }
-        ],
-        lowStockItems: dashboardStats.data.lowStockCount || 12,
-        outOfStockItems: 3
+        topSuppliers: suppliersToShow,
+        monthlySales: completeMonthlySales.slice(0, 6), // Show last 6 months
+        lowStockItems: dashboardStats.data.overview?.lowStockCount || dashboardStats.data.lowStockCount || 0,
+        outOfStockItems: dashboardStats.data.overview?.outOfStockCount || 0
       }
 
-      setReportData(mockReportData)
+      setReportData(reportData)
       setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch report data')
@@ -188,12 +226,7 @@ export default function ReportsPage() {
             Track performance and analyze business metrics
           </p>
         </div>
-        <div className="mt-4 flex space-x-3 md:mt-0 md:ml-4">
-          <button className="btn-secondary flex items-center space-x-2">
-            <FiDownload className="h-4 w-4" />
-            <span>Export Report</span>
-          </button>
-        </div>
+
       </div>
 
       {/* Filters */}
@@ -266,32 +299,24 @@ export default function ReportsPage() {
             <StatCard
               title="Total Sales"
               value={`$${reportData.totalSales.toLocaleString()}`}
-              change="8.5% from last period"
-              changeType="increase"
               icon={FiDollarSign}
               color="text-green-600"
             />
             <StatCard
               title="Total Purchases"
               value={`$${reportData.totalPurchases.toLocaleString()}`}
-              change="5.2% from last period"
-              changeType="increase"
               icon={FiTrendingDown}
               color="text-blue-600"
             />
             <StatCard
               title="Profit Margin"
               value={`${reportData.profitMargin}%`}
-              change="2.1% from last period"
-              changeType="increase"
               icon={FiActivity}
               color="text-purple-600"
             />
             <StatCard
               title="Inventory Value"
               value={`$${reportData.inventoryValue.toLocaleString()}`}
-              change="3.8% from last period"
-              changeType="increase"
               icon={FiPackage}
               color="text-indigo-600"
             />
@@ -299,30 +324,42 @@ export default function ReportsPage() {
 
           {/* Charts and Reports */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Sales Trend Chart */}
+            {/* Sales & Purchase Trend Chart */}
             <div className="card p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">
                 Sales & Purchase Trend
               </h3>
               <div className="space-y-4">
-                {reportData.monthlySales.map((month, index) => (
-                  <div key={index} className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <div className="flex justify-between items-center mb-1">
+                {reportData.monthlySales.map((month, index) => {
+                  const maxValue = Math.max(...reportData.monthlySales.map(m => Math.max(m.sales, m.purchases)));
+                  const salesPercentage = maxValue > 0 ? (month.sales / maxValue) * 100 : 0;
+                  const purchasesPercentage = maxValue > 0 ? (month.purchases / maxValue) * 100 : 0;
+                  
+                  return (
+                    <div key={index} className="space-y-2">
+                      <div className="flex justify-between items-center">
                         <span className="text-sm font-medium text-gray-700">{month.month}</span>
-                        <span className="text-sm text-gray-500">
-                          ${month.sales.toLocaleString()}
-                        </span>
+                        <div className="text-sm text-gray-500">
+                          Sales: ${month.sales.toLocaleString()} | Purchases: ${month.purchases.toLocaleString()}
+                        </div>
                       </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div 
-                          className="bg-primary-600 h-2 rounded-full"
-                          style={{ width: `${(month.sales / 50000) * 100}%` }}
-                        ></div>
+                      <div className="space-y-1">
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div 
+                            className="bg-green-500 h-2 rounded-full"
+                            style={{ width: `${salesPercentage}%` }}
+                          ></div>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div 
+                            className="bg-blue-500 h-2 rounded-full"
+                            style={{ width: `${purchasesPercentage}%` }}
+                          ></div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 

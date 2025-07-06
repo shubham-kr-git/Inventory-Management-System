@@ -48,6 +48,27 @@ const getDashboardStats = async (req, res) => {
       },
       { $sort: { _id: 1 } }
     ]);
+
+    // Get monthly purchases data for chart
+    const monthlyPurchases = await Transaction.aggregate([
+      {
+        $match: {
+          type: 'purchase',
+          date: {
+            $gte: new Date(currentYear, 0, 1),
+            $lte: new Date(currentYear, 11, 31)
+          }
+        }
+      },
+      {
+        $group: {
+          _id: { $month: '$date' },
+          totalAmount: { $sum: '$totalAmount' },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]);
     
     // Get top selling products
     const topProducts = await Transaction.aggregate([
@@ -111,6 +132,45 @@ const getDashboardStats = async (req, res) => {
       averageCreditUtilization: 0
     };
 
+    // Get top suppliers by transaction value
+    const topSuppliers = await Transaction.aggregate([
+      {
+        $match: { 
+          type: 'purchase',
+          supplier: { $exists: true }
+        }
+      },
+      {
+        $group: {
+          _id: '$supplier',
+          totalAmount: { $sum: '$totalAmount' },
+          totalQuantity: { $sum: '$quantity' },
+          orderCount: { $sum: 1 }
+        }
+      },
+      {
+        $lookup: {
+          from: 'suppliers',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'supplier'
+        }
+      },
+      {
+        $unwind: '$supplier'
+      },
+      {
+        $project: {
+          name: '$supplier.name',
+          totalAmount: 1,
+          totalQuantity: 1,
+          orderCount: 1
+        }
+      },
+      { $sort: { totalAmount: -1 } },
+      { $limit: 5 }
+    ]);
+
     res.status(200).json({
       success: true,
       data: {
@@ -128,7 +188,9 @@ const getDashboardStats = async (req, res) => {
         },
         recentTransactions,
         monthlySales,
+        monthlyPurchases,
         topProducts,
+        topSuppliers,
         supplierStats: {
           totalCreditLimit: supplierData.totalCreditLimit,
           totalCurrentBalance: supplierData.totalCurrentBalance,

@@ -8,7 +8,6 @@ import {
   FiEdit2, 
   FiTrash2, 
   FiFilter,
-  FiDownload,
   FiUpload,
   FiAlertCircle,
   FiCheck,
@@ -251,10 +250,6 @@ export default function ProductsPage() {
           </p>
         </div>
         <div className="mt-4 flex space-x-3 md:mt-0 md:ml-4">
-          <button className="btn-secondary flex items-center space-x-2">
-            <FiDownload className="h-4 w-4" />
-            <span>Export</span>
-          </button>
           <button 
             onClick={handleAddProduct}
             className="btn-primary flex items-center space-x-2"

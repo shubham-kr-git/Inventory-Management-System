@@ -2,7 +2,7 @@
 
 import React from 'react'
 import { usePathname } from 'next/navigation'
-import { FiBell, FiMenu, FiSearch } from 'react-icons/fi'
+import { FiMenu } from 'react-icons/fi'
 
 export default function Header() {
   const pathname = usePathname()
@@ -53,37 +53,11 @@ export default function Header() {
             </div>
           </div>
 
-          {/* Right side - Search and notifications */}
-          <div className="flex items-center space-x-4">
-            {/* Search */}
-            <div className="hidden md:block">
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <FiSearch className="h-5 w-5 text-gray-400" />
-                </div>
-                <input
-                  type="text"
-                  placeholder="Search..."
-                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
-                />
-              </div>
-            </div>
-
-            {/* Notifications */}
-            <button
-              type="button"
-              className="bg-white p-2 rounded-full text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 relative"
-            >
-              <FiBell className="h-6 w-6" />
-              {/* Notification badge */}
-              <span className="absolute top-0 right-0 block h-2 w-2 rounded-full bg-red-400 transform translate-x-1/2 -translate-y-1/2"></span>
-            </button>
-
+          {/* Right side - User profile */}
+          <div className="flex items-center">
             {/* User profile placeholder */}
-            <div className="flex items-center">
-              <div className="h-8 w-8 bg-primary-600 rounded-full flex items-center justify-center">
-                <span className="text-sm font-medium text-white">A</span>
-              </div>
+            <div className="h-8 w-8 bg-primary-600 rounded-full flex items-center justify-center">
+              <span className="text-sm font-medium text-white">A</span>
             </div>
           </div>
         </div>

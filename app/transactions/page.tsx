@@ -7,7 +7,6 @@ import {
   FiSearch, 
   FiEdit2, 
   FiTrash2, 
-  FiDownload,
   FiAlertCircle,
   FiX,
   FiFilter,
@@ -206,12 +205,7 @@ export default function TransactionsPage() {
             Record and track all inventory movements
           </p>
         </div>
-        <div className="mt-4 flex space-x-3 md:mt-0 md:ml-4">
-          <button className="btn-secondary flex items-center space-x-2">
-            <FiDownload className="h-4 w-4" />
-            <span>Export</span>
-          </button>
-        </div>
+
       </div>
 
       {/* Filters */}

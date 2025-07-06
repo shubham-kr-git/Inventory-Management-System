@@ -19,7 +19,7 @@ const navigation = [
   { name: 'Suppliers', href: '/suppliers', icon: FiUsers },
   { name: 'Transactions', href: '/transactions', icon: FiTrendingUp },
   { name: 'Reports', href: '/reports', icon: FiBarChart2 },
-  { name: 'Settings', href: '/settings', icon: FiSettings },
+  // { name: 'Settings', href: '/settings', icon: FiSettings },
 ]
 
 export default function Sidebar() {
@@ -66,21 +66,7 @@ export default function Sidebar() {
             })}
           </nav>
           
-          {/* Footer */}
-          <div className="flex-shrink-0 flex border-t border-gray-200 p-4">
-            <div className="flex-shrink-0 w-full group block">
-              <div className="flex items-center">
-                <div className="ml-3">
-                  <p className="text-xs font-medium text-gray-700 group-hover:text-gray-900">
-                    Version 1.0.0
-                  </p>
-                  <p className="text-xs font-medium text-gray-500 group-hover:text-gray-700">
-                    Small Business Edition
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
+
         </div>
       </div>
     </div>

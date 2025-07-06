@@ -582,19 +582,7 @@ export default function SettingsPage() {
                       </div>
                     </div>
 
-                    <div className="border-t pt-6">
-                      <h4 className="text-md font-medium text-gray-900 mb-4">Data Export</h4>
-                      <p className="text-sm text-gray-500 mb-4">
-                        Export your data in various formats for external use or analysis.
-                      </p>
-                      
-                      <div className="flex flex-wrap gap-4">
-                        <button className="btn-secondary">Export Products (CSV)</button>
-                        <button className="btn-secondary">Export Suppliers (CSV)</button>
-                        <button className="btn-secondary">Export Transactions (CSV)</button>
-                        <button className="btn-secondary">Export Reports (PDF)</button>
-                      </div>
-                    </div>
+
                   </div>
                 </div>
               </div>
