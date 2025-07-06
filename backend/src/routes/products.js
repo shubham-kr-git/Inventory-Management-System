@@ -11,7 +11,8 @@ const {
   updateStock,
   adjustStockWithTransaction,
   getProductStats,
-  getReorderSuggestions
+  getReorderSuggestions,
+  clearSuggestionsCache
 } = require('../controllers/productController');
 
 // GET /api/products - Get all products with pagination and filtering
@@ -28,6 +29,22 @@ router.get('/out-of-stock', getOutOfStockProducts);
 
 // Add AI reorder suggestions endpoint
 router.get('/reorder-suggestions', getReorderSuggestions);
+
+// Add cache management endpoints
+router.delete('/reorder-suggestions/cache', (req, res) => {
+  try {
+    clearSuggestionsCache();
+    res.status(200).json({ 
+      success: true, 
+      message: 'AI suggestions cache cleared successfully' 
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to clear cache' 
+    });
+  }
+});
 
 // GET /api/products/:id - Get single product
 router.get('/:id', getProduct);

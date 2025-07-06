@@ -234,6 +234,11 @@ export const productsApi = {
 
   getReorderSuggestions: (): Promise<{ success: boolean; data: any[] }> =>
     apiRequest('/products/reorder-suggestions'),
+
+  clearReorderSuggestionsCache: (): Promise<{ success: boolean; message: string }> =>
+    apiRequest('/products/reorder-suggestions/cache', {
+      method: 'DELETE',
+    }),
 };
 
 // Suppliers API

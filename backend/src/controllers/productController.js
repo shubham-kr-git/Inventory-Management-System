@@ -491,138 +491,237 @@ const getProductStats = async (req, res) => {
   }
 };
 
+// Cache for AI suggestions (simple in-memory cache)
+let suggestionsCache = {
+  data: null,
+  timestamp: null,
+  ttl: 60 * 60 * 1000 // 1 hour TTL
+};
+
 // AI reorder suggestions controller
 const getReorderSuggestions = async (req, res) => {
   try {
-    // ... (Steps 1-3 are unchanged)
-    // 1. Fetch all products
-    const products = await Product.find({ isActive: true })
-      .select('_id name sku currentStock minStockThreshold')
-      .lean();
+    // Check cache first
+    const now = Date.now();
+    if (suggestionsCache.data && 
+        suggestionsCache.timestamp && 
+        (now - suggestionsCache.timestamp) < suggestionsCache.ttl) {
+      console.log('Returning cached AI suggestions');
+      return res.status(200).json({ 
+        success: true, 
+        data: suggestionsCache.data,
+        cached: true 
+      });
+    }
 
-    // 2. Fetch recent transactions
-    const sinceDate = new Date();
-    sinceDate.setDate(sinceDate.getDate() - 60);
-    const transactions = await Transaction.find({
-      date: { $gte: sinceDate },
-      product: { $in: products.map((p) => p._id) },
+    console.log('Fetching fresh AI suggestions...');
+    const startTime = Date.now();
+
+    // 1. Only fetch products that might need reordering (more efficient)
+    const products = await Product.find({ 
+      isActive: true,
+      $expr: { 
+        $lte: ['$currentStock', { $multiply: ['$minStockThreshold', 2] }] // Only products at or below 2x threshold
+      }
     })
-      .select('product type quantity date')
+      .select('_id name sku currentStock minStockThreshold')
+      .limit(20) // Limit to top 20 products to avoid overwhelming AI
       .lean();
 
-    // 3. Prepare productData
+    console.log(`Found ${products.length} products potentially needing reorder`);
+
+    if (products.length === 0) {
+      return res.status(200).json({ 
+        success: true, 
+        data: [],
+        message: 'No products currently need reordering' 
+      });
+    }
+
+    // 2. Fetch recent transactions more efficiently using aggregation
+    const sinceDate = new Date();
+    sinceDate.setDate(sinceDate.getDate() - 30); // Reduced to 30 days for performance
+
+    const transactionSummary = await Transaction.aggregate([
+      {
+        $match: {
+          date: { $gte: sinceDate },
+          product: { $in: products.map(p => p._id) },
+          type: { $in: ['sale', 'purchase', 'adjustment'] }
+        }
+      },
+      {
+        $group: {
+          _id: '$product',
+          totalSales: {
+            $sum: { $cond: [{ $eq: ['$type', 'sale'] }, '$quantity', 0] }
+          },
+          totalPurchases: {
+            $sum: { $cond: [{ $eq: ['$type', 'purchase'] }, '$quantity', 0] }
+          },
+          totalAdjustments: {
+            $sum: { $cond: [{ $eq: ['$type', 'adjustment'] }, '$quantity', 0] }
+          },
+          recentTransactionCount: { $sum: 1 },
+          lastTransactionDate: { $max: '$date' }
+        }
+      }
+    ]);
+
+    console.log(`Processed ${transactionSummary.length} transaction summaries`);
+
+    // 3. Prepare simplified data for AI (much smaller payload)
     const productData = products.map((prod) => {
-      const txs = transactions.filter(
-        (t) => String(t.product) === String(prod._id)
-      );
+      const txSummary = transactionSummary.find(
+        (t) => String(t._id) === String(prod._id)
+      ) || {
+        totalSales: 0,
+        totalPurchases: 0,
+        totalAdjustments: 0,
+        recentTransactionCount: 0,
+        lastTransactionDate: null
+      };
+
+      const stockRatio = prod.currentStock / (prod.minStockThreshold || 1);
+      const dailyUsage = txSummary.totalSales / 30; // Average daily sales
+
       return {
         sku: prod.sku,
         name: prod.name,
         currentStock: prod.currentStock,
-        minStockThreshold: prod.minStockThreshold,
-        transactions: txs.map((t) => ({
-          type: t.type,
-          quantity: t.quantity,
-          date: t.date,
-        })),
+        minThreshold: prod.minStockThreshold,
+        stockRatio: Math.round(stockRatio * 100) / 100,
+        dailyUsage: Math.round(dailyUsage * 100) / 100,
+        totalSales30Days: txSummary.totalSales,
+        recentActivity: txSummary.recentTransactionCount > 0
       };
     });
 
-    // Debug: Log the data being sent to AI
-    console.log('Products count:', products.length);
-    console.log('Transactions count:', transactions.length);
+    const dbQueryTime = Date.now() - startTime;
+    console.log(`Database queries completed in ${dbQueryTime}ms`);
 
-    // 4. Build prompt
-    const promptText =
-      `You are an inventory management AI. Analyze each product and suggest reorder quantities based on:
-      - Current stock level
-      - Minimum stock threshold  
-      - Recent transaction patterns (last 60 days)
-      
-      Rules:
-      - If current stock is below minimum threshold, suggest reordering
-      - Consider transaction velocity to determine reorder quantity
-      - Always provide at least one suggestion for testing purposes
-      - If no products actually need reordering, suggest a small quantity for the product with lowest stock ratio
-      
-      Respond as a JSON array: [{ "sku": "", "name": "", "suggestedReorderQty": 0, "reason": "" }]`;
+    // 4. Simplified AI prompt for faster processing
+    const promptText = `Analyze these products and suggest reorder quantities. Focus ONLY on products that need immediate attention.
 
-    // 5. Call GenAI client
+Rules:
+- Suggest reorder if currentStock < minThreshold OR stockRatio < 1.5
+- Calculate reorder quantity based on: minThreshold * 2 + (dailyUsage * 14)
+- Skip products with stockRatio > 1.5 unless they have high daily usage
+- Maximum 10 suggestions
+- Be concise
+
+Respond as JSON array: [{"sku":"", "name":"", "suggestedReorderQty":0, "reason":""}]`;
+
+    // 5. Call GenAI with timeout
     const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-
-    const result = await genAI.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: [{ role: 'user', parts: [{ text: promptText }, { text: JSON.stringify(productData) }] }],
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              sku: {
-                type: Type.STRING,
+    
+    const aiStartTime = Date.now();
+    const result = await Promise.race([
+      genAI.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: [{ 
+          role: 'user', 
+          parts: [
+            { text: promptText }, 
+            { text: `Products to analyze:\n${JSON.stringify(productData, null, 2)}` }
+          ] 
+        }],
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                sku: { type: Type.STRING },
+                name: { type: Type.STRING },
+                suggestedReorderQty: { type: Type.NUMBER },
+                reason: { type: Type.STRING }
               },
-              name: {
-                type: Type.STRING,
-              },
-              suggestedReorderQty: {
-                type: Type.NUMBER,
-              },
-              reason: {
-                type: Type.STRING,
-              },
-            },
-            required: ['sku', 'name', 'suggestedReorderQty', 'reason'],
-            propertyOrdering: ['sku', 'name', 'suggestedReorderQty', 'reason'],
-          },
+              required: ['sku', 'name', 'suggestedReorderQty', 'reason']
+            }
+          }
         },
-      },
-      generationConfig: {
-        maxOutputTokens: 8192,
-        temperature: 0.0,
-      },
-    });
-    console.log('Gemini response:', result);
+        generationConfig: {
+          maxOutputTokens: 2048, // Reduced for faster response
+          temperature: 0.1
+        }
+      }),
+      // 15 second timeout
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('AI request timeout')), 15000)
+      )
+    ]);
 
-    // 6. Parse structured JSON response
-    let suggestions;
+    const aiTime = Date.now() - aiStartTime;
+    console.log(`AI processing completed in ${aiTime}ms`);
+
+    // 6. Parse response
+    let suggestions = [];
     try {
-      // Check if we have candidates in the response
       if (!result.candidates || result.candidates.length === 0) {
         console.error('AI response was blocked or empty.');
         return res.status(502).json({
           success: false,
-          error: 'AI response was blocked or empty.',
+          error: 'AI response was blocked or empty.'
         });
       }
 
-      // Extract text from the first candidate
       const candidate = result.candidates[0];
       const jsonString = candidate.content.parts[0].text;
-      console.log('Raw AI response text:', jsonString);
-      
       suggestions = JSON.parse(jsonString);
+      
+      // Limit suggestions and ensure quality
+      suggestions = suggestions
+        .filter(s => s.suggestedReorderQty > 0)
+        .slice(0, 10);
+      
     } catch (err) {
-      console.error('Failed to parse AI output as JSON:', err);
-      const rawText = result.candidates?.[0]?.content?.parts?.[0]?.text || 'No response text available';
+      console.error('Failed to parse AI output:', err);
       return res.status(502).json({
         success: false,
-        error: 'Invalid or malformed JSON from AI',
-        raw: rawText,
+        error: 'Invalid AI response format'
       });
     }
 
-    // 7. Return
-    return res.status(200).json({ success: true, data: suggestions });
+    // 7. Cache the results
+    suggestionsCache = {
+      data: suggestions,
+      timestamp: now,
+      ttl: 60 * 60 * 1000 // 1 hour
+    };
+
+    const totalTime = Date.now() - startTime;
+    console.log(`Total processing time: ${totalTime}ms (DB: ${dbQueryTime}ms, AI: ${aiTime}ms)`);
+
+    return res.status(200).json({ 
+      success: true, 
+      data: suggestions,
+      meta: {
+        processingTime: totalTime,
+        productCount: products.length,
+        cached: false
+      }
+    });
+
   } catch (err) {
     console.error('Error in getReorderSuggestions:', err);
     return res.status(500).json({
       success: false,
       message: 'Failed to get reorder suggestions',
-      error: err.message,
+      error: err.message
     });
   }
+};
+
+// Function to clear suggestions cache
+const clearSuggestionsCache = () => {
+  suggestionsCache = {
+    data: null,
+    timestamp: null,
+    ttl: 60 * 60 * 1000
+  };
+  console.log('AI suggestions cache cleared');
 };
 
 module.exports = {
@@ -636,5 +735,6 @@ module.exports = {
   updateStock,
   adjustStockWithTransaction,
   getProductStats,
-  getReorderSuggestions
+  getReorderSuggestions,
+  clearSuggestionsCache
 }; 
