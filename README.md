@@ -309,13 +309,3 @@ inventory-management/
 ├── lib/                # Utility libraries
 └── public/            # Static assets
 ```
-
-### Running Tests
-```bash
-# Frontend tests
-npm test
-
-# Backend tests
-cd backend
-npm test
-```
