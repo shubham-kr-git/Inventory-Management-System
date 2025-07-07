@@ -201,20 +201,23 @@ function ProductsContent({ onReorderAction, reorderData, onReorderComplete }: Pr
     }
   }, [reorderData, products])
 
-  // Handle reorder action from ReorderHandler (keeping for backward compatibility)
-  const handleReorderAction = (sku: string, qty: string, productName: string) => {
-    // This is now handled by the useEffect above when reorderData changes
-    // But we keep this function for any direct calls
-  }
+
 
 
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setError(null)
     
     // Validation: Initial stock must be greater than 0 for new products
     if (formData.currentStock <= 0) {
       setError('Initial stock must be greater than 0 when creating a new product. An opening balance transaction will be automatically created to track this inventory.')
+      return
+    }
+    
+    // Validation: Selling price should be greater than cost price
+    if (formData.price <= formData.costPrice) {
+      setError('Selling price should be greater than cost price to ensure profitability.')
       return
     }
     
@@ -255,6 +258,26 @@ function ProductsContent({ onReorderAction, reorderData, onReorderComplete }: Pr
   // Handle stock adjustment
   const handleStockAdjustment = async (e: React.FormEvent) => {
     e.preventDefault()
+    setError(null)
+    
+    // Validation: Quantity must be positive
+    if (stockAdjustment.adjustment <= 0) {
+      setError('Adjustment quantity must be greater than 0')
+      return
+    }
+    
+    // Validation: Cannot subtract more than current stock
+    if (stockAdjustment.type === 'subtract' && stockAdjustment.adjustment > stockAdjustment.currentStock) {
+      setError(`Cannot subtract ${stockAdjustment.adjustment} units. Only ${stockAdjustment.currentStock} units available in stock.`)
+      return
+    }
+    
+    // Validation: Reasonable quantity limits (max 10,000 units per adjustment)
+    if (stockAdjustment.adjustment > 10000) {
+      setError('Adjustment quantity cannot exceed 10,000 units. For larger adjustments, please contact administrator.')
+      return
+    }
+    
     try {
       const response = await productsApi.updateStock(
         stockAdjustment.productId, 
@@ -265,6 +288,7 @@ function ProductsContent({ onReorderAction, reorderData, onReorderComplete }: Pr
       console.log('Stock adjusted successfully. Transaction created:', response.data.transaction)
       await fetchProducts()
       setShowStockModal(false)
+      setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update stock')
     }
@@ -493,8 +517,10 @@ function ProductsContent({ onReorderAction, reorderData, onReorderComplete }: Pr
                   <input
                     type="text"
                     value={formData.sku}
-                    onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
+                    onChange={(e) => setFormData({ ...formData, sku: e.target.value.toUpperCase() })}
                     className="input"
+                    pattern="[A-Z0-9\-]{1,20}"
+                    title="SKU should contain only uppercase letters, numbers, and hyphens (max 20 characters)"
                     required
                   />
                 </div>
@@ -503,13 +529,24 @@ function ProductsContent({ onReorderAction, reorderData, onReorderComplete }: Pr
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Category
                   </label>
-                  <input
-                    type="text"
+                  <select
                     value={formData.category}
                     onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                     className="input"
                     required
-                  />
+                  >
+                    <option value="">Select Category</option>
+                    <option value="Electronics">Electronics</option>
+                    <option value="Furniture">Furniture</option>
+                    <option value="Stationery">Stationery</option>
+                    <option value="Clothing">Clothing</option>
+                    <option value="Books">Books</option>
+                    <option value="Sports">Sports</option>
+                    <option value="Home & Garden">Home & Garden</option>
+                    <option value="Automotive">Automotive</option>
+                    <option value="Health & Beauty">Health & Beauty</option>
+                    <option value="Other">Other</option>
+                  </select>
                 </div>
                 
                 <div>
@@ -706,11 +743,18 @@ function ProductsContent({ onReorderAction, reorderData, onReorderComplete }: Pr
                   </label>
                   <input
                     type="number"
+                    min="1"
+                    max="10000"
                     value={stockAdjustment.adjustment}
                     onChange={(e) => setStockAdjustment({ ...stockAdjustment, adjustment: parseInt(e.target.value) || 0 })}
                     className="input"
                     required
                   />
+                  {stockAdjustment.type === 'subtract' && stockAdjustment.adjustment > stockAdjustment.currentStock && (
+                    <p className="mt-1 text-xs text-red-500">
+                      Warning: Cannot subtract more than current stock ({stockAdjustment.currentStock} units)
+                    </p>
+                  )}
                 </div>
                 
                 <div className="bg-gray-50 p-3 rounded-md">

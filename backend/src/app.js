@@ -28,7 +28,6 @@ const corsOptions = {
     if (allowedOrigins.includes(origin) || isRailwayDomain || isVercelDomain) {
       callback(null, true);
     } else {
-      console.log('CORS blocked origin:', origin);
       callback(new Error('Not allowed by CORS'));
     }
   },

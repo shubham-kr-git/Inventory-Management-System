@@ -409,6 +409,8 @@ export default function SuppliersPage() {
                   <input
                     type="tel"
                     required
+                    pattern="[\+]?[1-9][\d\s\-\(\)]{0,15}"
+                    title="Please enter a valid phone number"
                     value={formData.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                     className="input"
@@ -423,10 +425,11 @@ export default function SuppliersPage() {
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Street Address
+                      Street Address *
                     </label>
                     <input
                       type="text"
+                      required
                       value={formData.address.street}
                       onChange={(e) => setFormData({ 
                         ...formData, 
@@ -439,10 +442,11 @@ export default function SuppliersPage() {
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        City
+                        City *
                       </label>
                       <input
                         type="text"
+                        required
                         value={formData.address.city}
                         onChange={(e) => setFormData({ 
                           ...formData, 
@@ -454,10 +458,11 @@ export default function SuppliersPage() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        State
+                        State *
                       </label>
                       <input
                         type="text"
+                        required
                         value={formData.address.state}
                         onChange={(e) => setFormData({ 
                           ...formData, 
@@ -469,10 +474,11 @@ export default function SuppliersPage() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Zip Code
+                        Zip Code *
                       </label>
                       <input
                         type="text"
+                        required
                         value={formData.address.zipCode}
                         onChange={(e) => setFormData({ 
                           ...formData, 
@@ -484,10 +490,11 @@ export default function SuppliersPage() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Country
+                        Country *
                       </label>
                       <input
                         type="text"
+                        required
                         value={formData.address.country}
                         onChange={(e) => setFormData({ 
                           ...formData, 

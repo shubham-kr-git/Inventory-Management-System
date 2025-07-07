@@ -172,7 +172,6 @@ const createTransaction = async (req, res) => {
       const supplier = await Supplier.findById(req.body.supplier);
       if (supplier) {
         await supplier.updateBalance(transaction.totalAmount, 'add');
-        console.log(`Updated supplier ${supplier.name} balance by $${transaction.totalAmount}`);
       }
     } else if (req.body.type === 'sale') {
       await product.updateStock(req.body.quantity, 'subtract');

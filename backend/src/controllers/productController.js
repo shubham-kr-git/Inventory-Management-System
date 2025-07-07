@@ -100,84 +100,69 @@ const getProduct = async (req, res) => {
 // Create new product
 const createProduct = async (req, res) => {
   try {
-    console.log('=== CREATE PRODUCT DEBUG ===');
-    console.log('Request body:', JSON.stringify(req.body, null, 2));
-    
-    // Validate supplier exists
-    console.log('Looking for supplier with ID:', req.body.supplier);
+    // Find the supplier first
     const supplier = await Supplier.findById(req.body.supplier);
     if (!supplier) {
-      console.log('Supplier not found!');
-      return res.status(400).json({
+      return res.status(404).json({
         success: false,
         error: 'Supplier not found'
       });
     }
-    console.log('Supplier found:', supplier.name);
 
-    console.log('Creating product with data:', req.body);
-    const product = await Product.create(req.body);
-    console.log('Product created successfully:', product._id);
-    
-    // Create opening balance transaction if initial stock > 0
-    let openingBalanceTransaction = null;
-    if (req.body.currentStock && req.body.currentStock > 0) {
-      console.log('Creating opening balance transaction for initial stock:', req.body.currentStock);
-      console.log('Using cost price for opening balance:', req.body.costPrice);
-      
-      const unitPrice = req.body.costPrice || 0;
-      const totalAmount = req.body.currentStock * unitPrice;
-      
-      const transactionData = {
-        type: 'adjustment',
-        product: product._id,
-        quantity: req.body.currentStock,
-        unitPrice: unitPrice, // Use cost price for opening balance valuation
-        totalAmount: totalAmount, // Calculate total value of opening inventory
-        notes: 'Opening balance - Initial inventory',
-        status: 'completed',
-        paymentStatus: 'n/a',
-        reference: `OPENING-${product.sku}`,
-        date: new Date()
-      };
-      
-      openingBalanceTransaction = await Transaction.create(transactionData);
-      console.log('Opening balance transaction created:', openingBalanceTransaction._id);
-      console.log('Transaction value:', `${req.body.currentStock} units @ $${unitPrice} = $${totalAmount}`);
-    }
-    
-    const populatedProduct = await Product.findById(product._id)
-      .populate('supplier', 'name email');
+    // Create the product
+    const product = new Product({
+      ...req.body,
+      supplier: supplier._id
+    });
 
-    console.log('=== CREATE PRODUCT SUCCESS ===');
+    const savedProduct = await product.save();
+
+    // Populate the supplier information before sending response
+    await savedProduct.populate('supplier', 'name email');
+
+    // Create opening balance transaction for initial stock
+    const unitPrice = req.body.costPrice || req.body.price || 0;
+    const totalAmount = req.body.currentStock * unitPrice;
+
+    const openingBalanceTransaction = new Transaction({
+      type: 'adjustment',
+      product: savedProduct._id,
+      quantity: req.body.currentStock,
+      unitPrice: unitPrice,
+      totalAmount: totalAmount,
+      status: 'completed',
+      paymentStatus: 'n/a',
+      referenceNumber: `OB-${savedProduct.sku}-${Date.now()}`,
+      reason: 'Opening balance - Initial stock entry'
+    });
+
+    await openingBalanceTransaction.save();
+    await openingBalanceTransaction.populate('product', 'name sku');
+
     res.status(201).json({
       success: true,
-      data: populatedProduct,
+      data: savedProduct,
       transaction: openingBalanceTransaction,
-      message: `Product created successfully${openingBalanceTransaction ? ' with opening balance transaction' : ''}`
+      message: 'Product created successfully with opening balance transaction'
     });
+
   } catch (error) {
-    console.log('=== CREATE PRODUCT ERROR ===');
-    console.log('Error type:', error.constructor.name);
-    console.log('Error code:', error.code);
-    console.log('Error message:', error.message);
-    console.log('Full error:', error);
+    console.error('Error creating product:', error.message);
     
     if (error.code === 11000) {
-      console.log('Duplicate key error - SKU already exists');
       return res.status(400).json({
         success: false,
-        error: 'SKU already exists'
+        error: 'SKU already exists',
+        details: 'A product with this SKU already exists in the system'
       });
     }
     
     if (error.name === 'ValidationError') {
-      console.log('Validation error details:', error.errors);
+      const validationErrors = Object.values(error.errors).map(err => err.message);
       return res.status(400).json({
         success: false,
         error: 'Validation failed',
-        details: error.message,
-        validationErrors: error.errors
+        details: validationErrors.join(', ')
       });
     }
     
@@ -349,11 +334,10 @@ const updateStock = async (req, res) => {
 // Adjust product stock with transaction record
 const adjustStockWithTransaction = async (req, res) => {
   try {
-    console.log('=== STOCK ADJUSTMENT WITH TRANSACTION ===');
-    console.log('Request body:', JSON.stringify(req.body, null, 2));
-    
+    const { id } = req.params;
     const { quantity, type, reason } = req.body;
-    
+
+    // Validate required fields
     if (!quantity || !type) {
       return res.status(400).json({
         success: false,
@@ -361,8 +345,32 @@ const adjustStockWithTransaction = async (req, res) => {
       });
     }
 
-    const product = await Product.findById(req.params.id);
-    
+    // Validate quantity is positive
+    if (quantity <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Quantity must be greater than 0'
+      });
+    }
+
+    // Validate reasonable quantity limits (max 10,000 units per adjustment)
+    if (quantity > 10000) {
+      return res.status(400).json({
+        success: false,
+        error: 'Quantity cannot exceed 10,000 units per adjustment'
+      });
+    }
+
+    // Validate type
+    if (!['add', 'subtract', 'set'].includes(type)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Type must be one of: add, subtract, set'
+      });
+    }
+
+    // Get product with supplier info
+    const product = await Product.findById(id).populate('supplier', 'name email');
     if (!product) {
       return res.status(404).json({
         success: false,
@@ -370,72 +378,75 @@ const adjustStockWithTransaction = async (req, res) => {
       });
     }
 
-    // Calculate actual quantity change for transaction
-    let actualQuantityChange;
     const currentStock = product.currentStock;
-    
+    let newStock;
+    let actualQuantityChange;
+
+    // Additional validation for subtract operation
+    if (type === 'subtract' && quantity > currentStock) {
+      return res.status(400).json({
+        success: false,
+        error: `Cannot subtract ${quantity} units. Only ${currentStock} units available in stock.`
+      });
+    }
+
+    // Calculate new stock based on operation type
     switch (type) {
       case 'add':
+        newStock = currentStock + quantity;
         actualQuantityChange = quantity;
         break;
       case 'subtract':
-        actualQuantityChange = -quantity;
+        newStock = Math.max(0, currentStock - quantity);
+        actualQuantityChange = -(Math.min(quantity, currentStock));
         break;
       case 'set':
-        actualQuantityChange = quantity - currentStock;
+        newStock = Math.max(0, quantity);
+        actualQuantityChange = newStock - currentStock;
         break;
-      default:
-        return res.status(400).json({
-          success: false,
-          error: 'Invalid adjustment type'
-        });
     }
 
-    // Generate reference number
-    const timestamp = Date.now();
-    const referenceNumber = `ADJ-${timestamp}`;
+    // Determine transaction type based on whether we're adding or removing stock
+    let transactionType;
+    if (actualQuantityChange > 0) {
+      transactionType = 'adjustment'; // Stock increase (could be purchase, return, etc.)
+    } else if (actualQuantityChange < 0) {
+      transactionType = 'adjustment'; // Stock decrease (could be sale, loss, etc.)
+    } else {
+      // No actual change
+      return res.status(200).json({
+        success: true,
+        data: { product, transaction: null },
+        message: 'No stock change required'
+      });
+    }
 
-    // Get product with supplier information
-    const productWithSupplier = await Product.findById(req.params.id).populate('supplier', '_id name');
-    
-    // Create transaction record first
-    const Transaction = require('../models/Transaction');
-    
-    // Use cost price for adjustments to track financial impact
-    const unitPrice = product.costPrice || 0;
+    // Calculate pricing (use cost price for valuation)
+    const unitPrice = product.costPrice || product.price || 0;
     const totalAmount = Math.abs(actualQuantityChange) * unitPrice;
-    
-    console.log(`Transaction pricing: ${Math.abs(actualQuantityChange)} units @ $${unitPrice} = $${totalAmount}`);
-    
+
+    // Create transaction record
     const transactionData = {
-      type: 'adjustment',
-      product: product._id,
-      quantity: actualQuantityChange, // Positive for additions, negative for subtractions
-      unitPrice: unitPrice, // Use product cost price for proper valuation
-      totalAmount: totalAmount, // Calculate total value impact
-      supplier: productWithSupplier.supplier._id, // Include supplier from product
-      reference: referenceNumber,
-      notes: `Stock adjustment: ${type} ${Math.abs(quantity)} units${reason ? ` (${reason})` : ''}`,
+      type: transactionType,
+      product: id,
+      quantity: Math.abs(actualQuantityChange),
+      unitPrice: unitPrice,
+      totalAmount: totalAmount,
       status: 'completed',
-      paymentStatus: 'n/a'
+      paymentStatus: 'n/a',
+      referenceNumber: `ADJ-${product.sku}-${Date.now()}`,
+      reason: reason || `Stock ${type} via dashboard`
     };
 
-    console.log('Creating transaction:', transactionData);
-    const transaction = new Transaction(transactionData);
-    await transaction.save();
-    console.log('Transaction created:', transaction._id);
+    const transaction = await Transaction.create(transactionData);
 
     // Update product stock
-    console.log(`Updating stock: ${currentStock} → ${type} ${quantity}`);
-    await product.updateStock(quantity, type);
-    console.log('Stock updated successfully');
-    
-    // Get updated product with populated supplier
-    const updatedProduct = await Product.findById(req.params.id)
-      .populate('supplier', 'name email');
+    const updatedProduct = await Product.findByIdAndUpdate(
+      id,
+      { currentStock: newStock },
+      { new: true, runValidators: true }
+    ).populate('supplier', 'name email');
 
-    console.log('Stock adjustment completed successfully');
-    
     res.status(200).json({
       success: true,
       data: {
@@ -445,12 +456,7 @@ const adjustStockWithTransaction = async (req, res) => {
       message: `Stock ${type === 'add' ? 'increased' : type === 'subtract' ? 'decreased' : 'adjusted'} successfully`
     });
   } catch (error) {
-    console.log('=== STOCK ADJUSTMENT ERROR ===');
-    console.log('Error type:', error.constructor.name);
-    console.log('Error message:', error.message);
-    if (error.errors) {
-      console.log('Validation errors:', error.errors);
-    }
+    console.error('Stock adjustment error:', error.message);
     
     res.status(500).json({
       success: false,
@@ -506,7 +512,6 @@ const getReorderSuggestions = async (req, res) => {
     if (suggestionsCache.data && 
         suggestionsCache.timestamp && 
         (now - suggestionsCache.timestamp) < suggestionsCache.ttl) {
-      console.log('Returning cached AI suggestions');
       return res.status(200).json({ 
         success: true, 
         data: suggestionsCache.data,
@@ -514,7 +519,6 @@ const getReorderSuggestions = async (req, res) => {
       });
     }
 
-    console.log('Fetching fresh AI suggestions...');
     const startTime = Date.now();
 
     // 1. Only fetch products that might need reordering (more efficient)
@@ -527,8 +531,6 @@ const getReorderSuggestions = async (req, res) => {
       .select('_id name sku currentStock minStockThreshold')
       .limit(20) // Limit to top 20 products to avoid overwhelming AI
       .lean();
-
-    console.log(`Found ${products.length} products potentially needing reorder`);
 
     if (products.length === 0) {
       return res.status(200).json({ 
@@ -568,8 +570,6 @@ const getReorderSuggestions = async (req, res) => {
       }
     ]);
 
-    console.log(`Processed ${transactionSummary.length} transaction summaries`);
-
     // 3. Prepare simplified data for AI (much smaller payload)
     const productData = products.map((prod) => {
       const txSummary = transactionSummary.find(
@@ -598,7 +598,6 @@ const getReorderSuggestions = async (req, res) => {
     });
 
     const dbQueryTime = Date.now() - startTime;
-    console.log(`Database queries completed in ${dbQueryTime}ms`);
 
     // 4. Simplified AI prompt for faster processing
     const promptText = `Analyze these products and suggest reorder quantities. Focus ONLY on products that need immediate attention.
@@ -649,12 +648,11 @@ Respond as JSON array: [{"sku":"", "name":"", "suggestedReorderQty":0, "reason":
       }),
       // 15 second timeout
       new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('AI request timeout')), 15000)
+        setTimeout(() => reject(new Error('AI request timeout')), 25000)
       )
     ]);
 
     const aiTime = Date.now() - aiStartTime;
-    console.log(`AI processing completed in ${aiTime}ms`);
 
     // 6. Parse response
     let suggestions = [];
@@ -692,7 +690,6 @@ Respond as JSON array: [{"sku":"", "name":"", "suggestedReorderQty":0, "reason":
     };
 
     const totalTime = Date.now() - startTime;
-    console.log(`Total processing time: ${totalTime}ms (DB: ${dbQueryTime}ms, AI: ${aiTime}ms)`);
 
     return res.status(200).json({ 
       success: true, 
@@ -721,7 +718,6 @@ const clearSuggestionsCache = () => {
     timestamp: null,
     ttl: 60 * 60 * 1000
   };
-  console.log('AI suggestions cache cleared');
 };
 
 module.exports = {
